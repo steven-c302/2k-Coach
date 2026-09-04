@@ -18,8 +18,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * plan's testing strategy calls this out explicitly for query-shape-sensitive
  * logic ("don't mock the DB here"). Each test runs inside a rolled-back
  * transaction (Spring's default @Transactional test behavior) so rows from
- * one method never leak into the next, despite the container being shared
- * across the class for speed.
+ * one method never leak into the next.
+ *
+ * <p>{@code @SpringBootTest} boots the full application context, which means
+ * {@code SyncScheduler}'s startup bootstrap genuinely runs too — an empty
+ * `players` table gets seeded with all 1082 real local-scraper players
+ * before any test method executes. Every query here therefore filters on a
+ * nonsense, per-test {@code eraTag} that no real seed data uses, so
+ * assertions are isolated from that real data rather than colliding with it
+ * (an earlier version of this test asserted exact result sets without that
+ * isolation and failed in CI once real seed data was present alongside it).
  */
 @SpringBootTest
 @Testcontainers
@@ -37,33 +45,34 @@ class PlayerRepositoryIntegrationTest {
 
     @Test
     void filtersByPositionAndOverallRangeAgainstRealPostgres() {
-        save("Test PG", "PG", 90, "CURRENT");
-        save("Test SG", "SG", 90, "CURRENT");
-        save("Test PG Low", "PG", 60, "CURRENT");
+        save("Test PG", "PG", 90, "ZZTEST_POSITION");
+        save("Test SG", "SG", 90, "ZZTEST_POSITION");
+        save("Test PG Low", "PG", 60, "ZZTEST_POSITION");
 
-        List<PlayerResponse> result = playerService.search(new PlayerSearchRequest("PG", 80, 99, null, null));
+        List<PlayerResponse> result = playerService.search(new PlayerSearchRequest("PG", 80, 99, "ZZTEST_POSITION", null));
 
         assertThat(result).extracting(PlayerResponse::name).containsExactly("Test PG");
     }
 
     @Test
     void filtersByEraTagAgainstRealPostgres() {
-        save("Classic Player", "PG", 90, "1996");
-        save("Current Player", "PG", 90, "CURRENT");
+        save("Isolated Era Player", "PG", 90, "ZZTEST_ERA_ONE");
+        save("Other Era Player", "PG", 90, "ZZTEST_ERA_TWO");
 
-        List<PlayerResponse> result = playerService.search(new PlayerSearchRequest(null, null, null, "1996", null));
+        List<PlayerResponse> result = playerService.search(new PlayerSearchRequest(null, null, null, "ZZTEST_ERA_ONE", null));
 
-        assertThat(result).extracting(PlayerResponse::name).containsExactly("Classic Player");
+        assertThat(result).extracting(PlayerResponse::name).containsExactly("Isolated Era Player");
     }
 
     @Test
     void nameSearchIsCaseInsensitiveSubstringMatch() {
-        save("Michael Jordan", "SF", 99, "CURRENT");
-        save("LeBron James", "SF", 99, "CURRENT");
+        save("Zzzephyr Jordan", "SF", 99, "ZZTEST_NAME");
+        save("Zzzephyr James", "SF", 99, "ZZTEST_NAME");
 
-        List<PlayerResponse> result = playerService.search(new PlayerSearchRequest(null, null, null, null, "jordan"));
+        List<PlayerResponse> result = playerService.search(
+                new PlayerSearchRequest(null, null, null, "ZZTEST_NAME", "zzzephyr jordan"));
 
-        assertThat(result).extracting(PlayerResponse::name).containsExactly("Michael Jordan");
+        assertThat(result).extracting(PlayerResponse::name).containsExactly("Zzzephyr Jordan");
     }
 
     private void save(String name, String position, int overall, String eraTag) {
