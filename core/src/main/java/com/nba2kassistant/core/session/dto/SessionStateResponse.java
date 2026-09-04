@@ -10,12 +10,13 @@ public record SessionStateResponse(
         String guestClientId,
         boolean hostReady,
         boolean guestReady,
+        String lastNarration,
         long version
 ) {
     public static SessionStateResponse from(SessionState state) {
         return new SessionStateResponse(
                 state.code(), state.status(), state.hostClientId(), state.guestClientId(),
-                state.hostReady(), state.guestReady(), state.version()
+                state.hostReady(), state.guestReady(), state.lastNarration(), state.version()
         );
     }
 }

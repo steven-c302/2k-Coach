@@ -39,24 +39,33 @@ vision (FastAPI)        --REST events-->----------+        |
 
 ## Is it fully built? No — here's exactly what works today
 
-**Milestones 1–5 of 10** are done (see the roadmap below). Concretely:
+**Milestones 1–7 of 10** are done (see the roadmap below). Concretely:
 
 - ✅ Real player data with filters, via API and in the browser.
 - ✅ A team builder UI at `/` — filters, team size, era, and a "build around
   this player" autocomplete, generating a real roster.
-- ✅ Matchup analysis via API (`POST /api/matchups/analyze`) — deterministic
-  rules, no LLM. Not wired into any UI yet.
+- ✅ Matchup analysis via API — deterministic rules, no LLM.
 - ✅ Live sessions at `/session` — host/join by code, ready-up, broadcast over
   WebSocket. Two browser tabs joining the same code see each other update in
-  real time. Rosters/matchups aren't wired into a session yet — it's just
-  join + ready state for now.
-- ❌ No coaching engine, no LLM narration, and no OCR/vision pipeline yet.
-  Those are Milestones 6–10.
+  real time.
+- ✅ From inside a live session, trigger a matchup analysis and get a
+  narrated coaching tip broadcast to everyone in the session — async, with
+  version-based staleness discarding if a newer request supersedes an
+  in-flight one, logged to DynamoDB either way (`CoachingEventLog`). Falls
+  back to a free local template narrator when no `ANTHROPIC_API_KEY` is set
+  — see "Data source" below.
+- ✅ Every matchup analysis (session-triggered or bare API call) is appended
+  to a DynamoDB history table (`MatchupHistory`), queryable per session.
+- ❌ Rosters generated in the team builder aren't wired into a session yet —
+  you type player ids by hand into the analyze form. No coaching *rules*
+  UI (you see the narration, not the raw mismatch list, in the session view).
+  No OCR/vision pipeline. Those are Milestones 8–10 plus follow-on polish.
 
-So today you can build a roster, get a rules-based matchup readout via curl,
-and run a live join/ready session with a friend — but nothing connects those
-three yet (a session doesn't know about a generated roster, a matchup isn't
-triggered from inside a session).
+So today you can build a roster, run a live join/ready session with a
+friend, and from inside that session trigger a real (or template-narrated)
+coaching tip with full async/staleness handling and an auditable DynamoDB
+trail — genuinely the most resume-relevant piece of the whole plan, and it's
+demoable end to end, not just unit-tested.
 
 ## How to actually run what exists
 
@@ -124,10 +133,23 @@ Then:
   `/app/sessions/{code}/join` with `{"clientId": "...", "role": "HOST"|"GUEST"}`
   — the web app's `/session/{code}` page does exactly this
   (`@stomp/stompjs`), it's the easiest way to see it work.
+- From inside a session (the web page), fill in comma-separated player ids
+  for two teams and click "Analyze matchup" — this sends
+  `/app/sessions/{code}/analyze`, which bumps the session's version,
+  runs the rules engine, and dispatches a narration request on a dedicated
+  executor (never the session's own low-latency thread). The narration
+  broadcasts to `/topic/sessions/{code}` and appears in every connected tab
+  — unless a newer analyze request beat it back, in which case it's silently
+  discarded rather than shown out of order. Check the audit trail either way:
+  ```bash
+  curl http://localhost:8080/api/sessions/{code}/coaching-log     # every request, DELIVERED or DISCARDED_STALE
+  curl http://localhost:8080/api/matchups/history/{code}          # every analysis, one row per call
+  ```
 - `vision` → http://localhost:8001/health (health check only — no capture
   loop exists yet, see Milestone 10 below)
-- Postgres → localhost:5432, LocalStack DynamoDB → localhost:4566 (unused
-  until Milestone 7)
+- Postgres → localhost:5432, LocalStack DynamoDB → localhost:4566 (tables
+  `CoachingEventLog`/`MatchupHistory` auto-created on first boot — see
+  `DynamoDbTableInitializer`)
 
 On first boot with an empty `players` table, core bootstraps itself
 automatically: from nba2kapi if `NBA2KAPI_API_KEY` is set in `.env`,
@@ -160,6 +182,17 @@ the app falls back to bootstrapping from the existing local scraper's
 `players.json` (name/team/position/overall only, no attributes/badges) so it
 runs out of the box — see `JsonSeedLoader`.
 
+Coaching narration uses the official [`anthropic-java`](https://github.com/anthropics/anthropic-sdk-java)
+SDK (`AnthropicLlmClient`, `claude-opus-5` at low effort by default — both
+configurable via `ANTHROPIC_MODEL`) when `ANTHROPIC_API_KEY` is set.
+**Without a key, `LlmClientSelector` falls back to `TemplateNarrationClient`
+— a free, local, deterministic narrator, not a stub** — so the async/staleness
+pipeline is fully demoable with zero external cost or dependency. This mirrors
+the nba2kapi/local-scraper fallback pattern from Milestone 1 exactly. If you
+do add a key, be aware it's usage-billed on your Anthropic account per
+narration request — swap `ANTHROPIC_MODEL` to `claude-haiku-4-5` for a much
+cheaper option if you want real narration without Opus-tier pricing.
+
 ## Milestone status
 
 See `docs/plan.md` §7 for the full roadmap. Current state:
@@ -189,17 +222,37 @@ See `docs/plan.md` §7 for the full roadmap. Current state:
       with two browser tabs sharing state, and with a 500-mutation/50-thread
       concurrency test (`SessionActorConcurrencyTest`) proving no lost
       updates.
-- [ ] Milestone 6 — Async/versioned LLM narration
-- [ ] Milestone 7 — DynamoDB matchup history
-- [ ] Milestone 8 — Full docker-compose (Postgres + core + web wired today;
-      DynamoDB/LocalStack wired but unused until Milestone 7; vision service
-      builds but has no capture loop yet)
+- [x] **Milestone 6 — Async/versioned LLM narration.** Implements the plan's
+      pseudocode literally: `CoachingNarrationService` runs the rules engine
+      synchronously (fast), dispatches the LLM call on a dedicated
+      `llmExecutor` (4 bounded threads, never the session actor's pool), and
+      on return compares the live session version against the version
+      captured when the request started — stale responses are discarded, not
+      broadcast. Every request/response, delivered or discarded, is written
+      to DynamoDB (`CoachingEventLogEntry`). Verified live: triggered
+      `/analyze` from the browser, watched the narration broadcast to the
+      session, confirmed the `DELIVERED` row via
+      `GET /api/sessions/{code}/coaching-log`. The stale-discard race itself
+      is proven by a dedicated test (`CoachingNarrationServiceTest`) using a
+      fake, controllable-delay `LlmClient` — exactly what the plan's testing
+      strategy calls for, not a real API call.
+- [x] **Milestone 7 — DynamoDB matchup history.** Every `MatchupAnalysisService.analyze()`
+      call — from the plain REST endpoint or from a session's `/analyze` —
+      appends to `MatchupHistory`, keyed by session code (`"STANDALONE"` for
+      bare API calls). `GET /api/matchups/history/{sessionCode}` is the
+      simple history view. `finalScore` stays `null`: there's no live score
+      feed until Milestone 10's OCR pipeline exists, and the field isn't
+      faked to look complete. Verified live for both the session-triggered
+      and standalone paths.
+- [ ] Milestone 8 — Full docker-compose (Postgres + core + web + DynamoDB all
+      genuinely wired and used now; vision service builds but has no capture
+      loop yet)
 - [ ] Milestone 9 — GitHub Actions CI
 - [ ] Milestone 10 — Vision microservice (FastAPI app scaffolded with
       `/health`; capture/OCR loop not implemented — calibration profiles in
       `vision/app/capture/regions.py` are unverified placeholders)
 
-`core`'s test suite: 58 JUnit tests, `./gradlew test` (no DB required — the
+`core`'s test suite: 68 JUnit tests, `./gradlew test` (no DB required — the
 rules engine, roster pipeline, and session logic are all tested as pure
 functions or against a mocked repository boundary). The original plan called
 for Testcontainers-backed Postgres integration tests starting at Milestone 4

@@ -14,6 +14,8 @@ import static com.nba2kassistant.core.matchup.SnapshotFixtures.attributes;
 import static com.nba2kassistant.core.matchup.SnapshotFixtures.player;
 import static com.nba2kassistant.core.matchup.SnapshotFixtures.team;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Full-pipeline test: real rule instances, a stubbed snapshot factory boundary. */
@@ -22,6 +24,8 @@ class MatchupAnalysisServiceTest {
 
     @Mock
     private TeamSnapshotFactory snapshotFactory;
+    @Mock
+    private MatchupHistoryRepository matchupHistoryRepository;
 
     @Test
     void combinesMismatchesFromEveryRule() {
@@ -34,7 +38,7 @@ class MatchupAnalysisServiceTest {
         when(snapshotFactory.build("Team B", List.of(2L))).thenReturn(teamB);
 
         MatchupAnalysisService service = new MatchupAnalysisService(
-                snapshotFactory, List.of(new ThreePointVolumeRule(), new SpeedMismatchRule()));
+                snapshotFactory, List.of(new ThreePointVolumeRule(), new SpeedMismatchRule()), matchupHistoryRepository);
 
         MatchupAnalysisResponse response = service.analyze(new MatchupAnalyzeRequest(List.of(1L), List.of(2L)));
 
@@ -49,10 +53,26 @@ class MatchupAnalysisServiceTest {
         when(snapshotFactory.build("Team A", List.of(1L))).thenReturn(teamA);
         when(snapshotFactory.build("Team B", List.of(2L))).thenReturn(teamB);
 
-        MatchupAnalysisService service = new MatchupAnalysisService(snapshotFactory, List.of(new ThreePointVolumeRule()));
+        MatchupAnalysisService service = new MatchupAnalysisService(
+                snapshotFactory, List.of(new ThreePointVolumeRule()), matchupHistoryRepository);
 
         MatchupAnalysisResponse response = service.analyze(new MatchupAnalyzeRequest(List.of(1L), List.of(2L)));
 
         assertThat(response.mismatches()).isEmpty();
+    }
+
+    @Test
+    void appendsEveryAnalysisToMatchupHistory() {
+        TeamSnapshot teamA = team("Team A", player(1, "P1", "PG"));
+        TeamSnapshot teamB = team("Team B", player(2, "P2", "PG"));
+        when(snapshotFactory.build("Team A", List.of(1L))).thenReturn(teamA);
+        when(snapshotFactory.build("Team B", List.of(2L))).thenReturn(teamB);
+
+        MatchupAnalysisService service = new MatchupAnalysisService(
+                snapshotFactory, List.of(), matchupHistoryRepository);
+
+        service.analyze(new MatchupAnalyzeRequest(List.of(1L), List.of(2L)));
+
+        verify(matchupHistoryRepository).append(any());
     }
 }

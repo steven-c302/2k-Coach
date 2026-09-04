@@ -39,6 +39,11 @@ dependencies {
 	implementation platform("software.amazon.awssdk:bom:${awsSdkVersion}")
 	implementation 'software.amazon.awssdk:dynamodb-enhanced'
 
+	// Official Anthropic SDK for coaching narration (Milestone 6) — falls back to
+	// TemplateNarrationClient when no ANTHROPIC_API_KEY is configured, same
+	// pattern as NbaTwoKApiClient/JsonSeedLoader in Milestone 1.
+	implementation 'com.anthropic:anthropic-java:2.34.0'
+
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 

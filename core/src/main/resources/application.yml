@@ -32,6 +32,16 @@ nba2kassistant:
     # JsonSeedLoader. Points at the existing scraper output, copied into
     # resources/seed/players.json.
     players-json-path: ${NBA2KASSISTANT_SEED_PATH:classpath:seed/players.json}
+  llm:
+    # Falls back to TemplateNarrationClient (no external call) when blank — see LlmClientSelector.
+    api-key: ${ANTHROPIC_API_KEY:}
+    model: ${ANTHROPIC_MODEL:claude-opus-5}
+  dynamodb:
+    # Blank endpoint resolves against real AWS; set for LocalStack (docker-compose sets
+    # this to http://localstack:4566). Reads/writes are best-effort (see CoachingEventLogRepository/
+    # MatchupHistoryRepository) — DynamoDB being unreachable never fails a user-facing request.
+    endpoint: ${DYNAMODB_ENDPOINT:}
+    region: ${AWS_REGION:us-east-1}
 
 management:
   endpoints:

@@ -74,4 +74,25 @@ class SessionStateTest {
         assertThat(original.hostClientId()).isNull();
         assertThat(mutated.hostClientId()).isEqualTo("host-1");
     }
+
+    @Test
+    void withVersionBumpChangesOnlyTheVersion() {
+        SessionState state = SessionState.newLobby("ABC123").withHost("host-1");
+
+        SessionState bumped = state.withVersionBump();
+
+        assertThat(bumped.version()).isEqualTo(state.version() + 1);
+        assertThat(bumped.hostClientId()).isEqualTo(state.hostClientId());
+        assertThat(bumped.status()).isEqualTo(state.status());
+    }
+
+    @Test
+    void withNarrationSetsTheNarrationAndBumpsVersion() {
+        SessionState state = SessionState.newLobby("ABC123");
+
+        SessionState narrated = state.withNarration("shoot more threes");
+
+        assertThat(narrated.lastNarration()).isEqualTo("shoot more threes");
+        assertThat(narrated.version()).isEqualTo(state.version() + 1);
+    }
 }
