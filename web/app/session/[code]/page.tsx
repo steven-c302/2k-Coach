@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Client } from "@stomp/stompjs";
+import TapTracker from "@/components/TapTracker";
 
 const CORE_WS_URL = process.env.NEXT_PUBLIC_CORE_WS_URL ?? "ws://localhost:8080/ws";
 
@@ -16,6 +17,7 @@ type SessionStateResponse = {
   hostReady: boolean;
   guestReady: boolean;
   lastNarration: string | null;
+  liveGameState: Record<string, unknown>;
   version: number;
 };
 
@@ -186,6 +188,19 @@ export default function LiveSessionPage({ params }: { params: { code: string } }
           <p style={{ fontStyle: "italic", marginTop: "0.5rem" }}>&ldquo;{state.lastNarration}&rdquo;</p>
         )}
       </fieldset>
+
+      <div style={{ marginTop: "2rem" }}>
+        <TapTracker sessionCode={code} />
+      </div>
+
+      {state && Object.keys(state.liveGameState).length > 0 && (
+        <p style={{ marginTop: "1rem", fontSize: "0.85rem", color: "#888" }}>
+          Live observed state (from OCR or the tap-tracker):{" "}
+          {Object.entries(state.liveGameState)
+            .map(([key, value]) => `${key}=${value}`)
+            .join(", ")}
+        </p>
+      )}
 
       <div style={{ marginTop: "1.5rem" }}>
         <button type="button" onClick={refreshCoachingLog}>

@@ -37,9 +37,9 @@ vision (FastAPI)        --REST events-->----------+        |
   (matchup history, the async LLM coaching log) — a poor fit for Postgres's
   relational strengths.
 
-## Is it fully built? No — here's exactly what works today
+## Is it fully built?
 
-**Milestones 1–9 of 10** are done (see the roadmap below). Concretely:
+**All 10 milestones are done.** Concretely:
 
 - ✅ Real player data with filters, via API and in the browser.
 - ✅ A team builder UI at `/` — filters, team size, era, and a "build around
@@ -60,19 +60,29 @@ vision (FastAPI)        --REST events-->----------+        |
   health-check-gated startup ordering, and CI (`.github/workflows/ci.yml`)
   runs JUnit + Testcontainers, a web typecheck/build, and vision's pytest
   suite on every push/PR.
+- ✅ A real capture → preprocess → OCR → parse → emit pipeline in `vision`
+  (`mss` capture, OpenCV crop/threshold/upscale, EasyOCR, regex parsing into
+  structured events), controllable per-session via `/api/capture/start`
+  and `/api/capture/stop`. Core's `POST /api/vision/events` routes an
+  incoming event into the matching session and broadcasts the update live.
+- ✅ A manual tap-tracker in the session view — the same event-shaped
+  endpoint the OCR pipeline uses, so a friend can track the score by hand
+  and it flows through the identical path. Verified live end to end: tapped
+  a score, watched it broadcast to a second browser tab.
 - ❌ Rosters generated in the team builder aren't wired into a session yet —
   you type player ids by hand into the analyze form. No coaching *rules*
-  UI (you see the narration, not the raw mismatch list, in the session view).
-  No OCR/vision pipeline. That's Milestone 10, deliberately last per the
-  plan — the hardest, most differentiating piece, and it needs a real "Play
-  Now" capture on your PC to calibrate, not something buildable/verifiable
-  end-to-end in this environment.
+  UI (you see the narration, not the raw mismatch list, in the session
+  view). The vision pipeline's actual OCR accuracy against a real "Play Now"
+  capture is **unverified** — this environment has no NBA 2K game and no
+  attached display to test screen capture against; see "Vision pipeline"
+  below for exactly what is and isn't proven.
 
 So today you can build a roster, run a live join/ready session with a
-friend, and from inside that session trigger a real (or template-narrated)
-coaching tip with full async/staleness handling and an auditable DynamoDB
-trail — genuinely the most resume-relevant piece of the whole plan, and it's
-demoable end to end, not just unit-tested.
+friend, trigger a real (or template-narrated) coaching tip with full
+async/staleness handling and an auditable DynamoDB trail, and either tap
+out the score by hand or (once calibrated on your PC) let OCR read it off
+the screen automatically — genuinely the whole system the resume describes,
+not a subset of it.
 
 ## How to actually run what exists
 
@@ -152,8 +162,18 @@ Then:
   curl http://localhost:8080/api/sessions/{code}/coaching-log     # every request, DELIVERED or DISCARDED_STALE
   curl http://localhost:8080/api/matchups/history/{code}          # every analysis, one row per call
   ```
-- `vision` → http://localhost:8001/health (health check only — no capture
-  loop exists yet, see Milestone 10 below)
+- The manual tap-tracker: on any session page, tap "+2"/"+3" for either
+  team — it posts through `/api/vision/events` (proxied) into the session's
+  `liveGameState`, broadcasting live, same as OCR would.
+- `vision` OCR capture (needs a real display with NBA 2K running — see
+  "Vision pipeline" below):
+  ```bash
+  curl -X POST http://localhost:8001/api/capture/start \
+    -H "Content-Type: application/json" \
+    -d '{"session_id": "K3F9QZ", "resolution": [1920, 1080]}'
+  curl http://localhost:8001/api/capture/status
+  curl -X POST http://localhost:8001/api/capture/stop -H "Content-Type: application/json" -d '{"session_id": "K3F9QZ"}'
+  ```
 - Postgres → localhost:5432, LocalStack DynamoDB → localhost:4566 (tables
   `CoachingEventLog`/`MatchupHistory` auto-created on first boot — see
   `DynamoDbTableInitializer`)
@@ -199,6 +219,51 @@ the nba2kapi/local-scraper fallback pattern from Milestone 1 exactly. If you
 do add a key, be aware it's usage-billed on your Anthropic account per
 narration request — swap `ANTHROPIC_MODEL` to `claude-haiku-4-5` for a much
 cheaper option if you want real narration without Opus-tier pricing.
+
+## Vision pipeline: what's verified vs. not
+
+Real code exists for every stage (capture, preprocess, OCR, parse, emit,
+control loop) — none of it is a stub. What's actually been proven to work,
+and what fundamentally can't be in this environment:
+
+- ✅ **Parsing** (`parse_score`/`parse_clock`/`parse_shot_clock`): pure
+  functions, fully unit-tested, including a real OCR-observed failure mode
+  (`parse_clock` accepts `.`/`,` as well as `:` because EasyOCR read a
+  rendered `"5:23"` back as `"5.23"` — caught by the golden-file test below,
+  then fixed and covered by a regression test).
+- ✅ **Preprocessing** (`preprocess_region`): unit-tested for correct
+  crop/grayscale/upscale math against synthetic arrays.
+- ✅ **OCR wrapper + end-to-end text extraction**: `test_ocr_golden.py` runs
+  real EasyOCR (not mocked) against a synthetic image rendered with
+  `cv2.putText` — proving the OCR→parsing composition genuinely works, not
+  just that the functions type-check. **This is not a real NBA 2K
+  screenshot** — no game and no real capture fixture exist in this
+  environment — so it says nothing about accuracy against the actual
+  stylized 2K HUD font.
+- ✅ **Event emission**: `EventClient.emit` tested against `httpx.MockTransport`
+  — request shape, URL, and error handling all verified without a real
+  network call.
+- ✅ **Core-side routing**: `POST /api/vision/events` → `SessionActor` →
+  broadcast, verified live via curl and via the browser tap-tracker
+  end-to-end (two tabs, one taps, both see the update).
+- ❌ **Actual screen capture** (`backend.grab_frame`, via `mss`): cannot be
+  exercised here at all — this environment has no attached display, and
+  `vision`'s own Docker container is headless by design (no X server). This
+  is the fundamental reason the plan puts this milestone last and ties its
+  dev-environment notes to your actual gaming PC, not a container.
+- ❌ **HUD calibration** (`app/capture/regions.py`): the one profile in
+  there is an explicit, labeled placeholder guess for 1080p. It has never
+  been checked against a real captured frame and almost certainly needs
+  real coordinates measured at your PC before OCR reads anything meaningful
+  off the actual game.
+
+**To actually finish calibrating this on your PC**: run `vision` natively
+(not in Docker, so `mss` can see your real display), take a screenshot
+while in a "Play Now" game, measure the pixel coordinates of the score/clock
+HUD elements at your resolution, and replace `PLACEHOLDER_1080P` in
+`regions.py` with real numbers. The rest of the pipeline (preprocess → OCR →
+parse → emit → broadcast) is already working code at that point, not
+something else to build.
 
 ## Milestone status
 
@@ -264,23 +329,48 @@ See `docs/plan.md` §7 for the full roadmap. Current state:
       which typechecks), `vision-tests` (`pytest` against a lightweight
       dependency set, skipping the heavy OpenCV/EasyOCR/torch stack that
       `test_health.py`/`test_regions.py` don't touch).
-- [ ] Milestone 10 — Vision microservice (FastAPI app scaffolded with
-      `/health`; capture/OCR loop not implemented — calibration profiles in
-      `vision/app/capture/regions.py` are unverified placeholders)
+- [x] **Milestone 10 — Vision microservice.** Real pipeline: `mss` capture
+      (`app/capture/backend.py`) → OpenCV crop/grayscale/threshold/upscale
+      (`app/capture/preprocess.py`) → EasyOCR (`app/ocr/reader.py`) → regex
+      parsing (`app/parsing.py`) → `POST /api/vision/events`
+      (`app/events.py`, from Milestone 1). `CaptureLoop`
+      (`app/capture/loop.py`) ticks on an interval, controllable per-session
+      via `/api/capture/start`/`/stop`; a tick failure is logged and skipped,
+      never kills the loop. Core's `VisionEventController`/`VisionEventService`
+      route an incoming event into the matching session's `SessionActor` and
+      broadcast the merged `liveGameState` live. The manual tap-tracker
+      (`web/components/TapTracker.tsx`) posts to the identical endpoint.
+      **What's genuinely verified vs. not** — see "Vision pipeline" above.
 
-`core`'s test suite: 69 JUnit tests, `./gradlew test`. Most are pure-logic or
-mocked-boundary tests (no DB required), but `PlayerRepositoryIntegrationTest`
-is a real Testcontainers-backed Postgres integration test — the plan's
-testing strategy calls this out explicitly for query-shape-sensitive logic
-("don't mock the DB here"), and it's what CI's `core-tests` job actually
-runs. **It fails when run locally in this development sandbox** — Docker's
-CLI works here (used throughout for `docker compose`), but Testcontainers
-talks to the raw Docker Engine API directly over the named pipe, and that
-API is stubbed/restricted in this sandbox regardless of which pipe is
-targeted. This is a local environment restriction, not a code bug — the
-same test runs for real in CI, where GitHub-hosted runners have native
-Docker access; verify a green run at the badge/Actions tab rather than
-trusting a local `./gradlew test` for this one test class specifically.
+`core`'s test suite: **77 JUnit tests, verified green on real CI**. Locally,
+`./gradlew test` shows 75 entries — 74 genuinely pass, and the 3
+Testcontainers-backed methods collapse into a single failing
+`initializationError` placeholder (JUnit reports one entry when a test
+class's setup fails entirely, not one per method) — see the Testcontainers
+note below for why. `vision` has 18 pytest tests (16 run in CI's lightweight job; the 2
+golden-file OCR tests need the full ML stack, verified via the vision Docker
+image). Most core tests are pure-logic or mocked-boundary (no DB required),
+but `PlayerRepositoryIntegrationTest` is a real Testcontainers-backed
+Postgres integration test — the plan's testing strategy calls this out
+explicitly for query-shape-sensitive logic ("don't mock the DB here"), and
+it's what CI's `core-tests` job actually runs.
+
+**It fails when run locally in this development sandbox** — Docker's CLI
+works here (used throughout for `docker compose`), but Testcontainers talks
+to the raw Docker Engine API directly over the named pipe, and that API is
+stubbed/restricted in this sandbox regardless of which pipe is targeted.
+This is a local environment restriction, not a code bug: the same test runs
+for real in CI, where GitHub-hosted runners have native Docker access —
+verify a green run at the Actions tab rather than trusting a local
+`./gradlew test` for this one test class specifically. Two real bugs
+surfaced only once CI actually ran on unrestricted infrastructure and are
+fixed on `main`: `gradlew` had lost its executable bit when committed from
+Windows (`Permission denied`, exit 126, invisible locally since git-bash's
+`./gradlew` invocation doesn't enforce the mode bit the same way), and the
+integration test's original assertions collided with the 1082 real players
+`SyncScheduler` seeds into the same fresh database before the test methods
+run (`@SpringBootTest` boots the *full* app, bootstrap logic included) — see
+the git history for both.
 
 ## Known gaps / assumptions to verify
 
@@ -293,9 +383,9 @@ trusting a local `./gradlew test` for this one test class specifically.
   the environment this was scaffolded in) — run `npm install` once locally
   and commit the lockfile, then switch `Dockerfile` from `npm install` to
   `npm ci`.
-- **`vision`**'s HUD calibration coordinates are placeholders —
-  they need to be measured against a real "Play Now" capture at your actual
-  play resolution before OCR produces anything meaningful.
+- **`vision`**'s HUD calibration and real-capture accuracy are unverified —
+  see the dedicated "Vision pipeline" section above for exactly what is and
+  isn't proven, and why.
 - **Multiple entries per player in the local-scraper seed data** (e.g. LeBron
   James: Cavaliers/Heat/Lakers, each a separate row even within the `CURRENT`
   era): this is intentional, not a data quality bug — 2K itself lists a
