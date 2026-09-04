@@ -8,7 +8,10 @@ than raising, since OCR misreads are the normal case, not an error.
 import re
 
 _SCORE_PATTERN = re.compile(r"(\d{1,3})\D+(\d{1,3})")
-_CLOCK_PATTERN = re.compile(r"(\d{1,2}):(\d{2})")
+# OCR commonly misreads a clock's colon as a period or comma at low res/small
+# fonts (confirmed against EasyOCR on a synthetic "5:23" fixture, which read
+# back "5.23") — the separator is accepted, not meaningfully part of the value.
+_CLOCK_PATTERN = re.compile(r"(\d{1,2})[:.,](\d{2})")
 _SHOT_CLOCK_PATTERN = re.compile(r"\b(\d{1,2})\b")
 
 

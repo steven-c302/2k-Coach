@@ -18,6 +18,13 @@ def test_parse_clock_reads_minutes_and_seconds():
     assert parse_clock("Q3 05:23") == {"minutes": 5, "seconds": 23}
 
 
+def test_parse_clock_tolerates_a_colon_misread_as_a_period_or_comma():
+    # Confirmed against real EasyOCR output on a synthetic "5:23" fixture,
+    # which read back "5.23" — see test_ocr_golden.py.
+    assert parse_clock("5.23") == {"minutes": 5, "seconds": 23}
+    assert parse_clock("5,23") == {"minutes": 5, "seconds": 23}
+
+
 def test_parse_clock_rejects_an_invalid_seconds_value():
     assert parse_clock("5:99") is None
 

@@ -95,4 +95,29 @@ class SessionStateTest {
         assertThat(narrated.lastNarration()).isEqualTo("shoot more threes");
         assertThat(narrated.version()).isEqualTo(state.version() + 1);
     }
+
+    @Test
+    void newLobbyStartsWithEmptyLiveGameState() {
+        assertThat(SessionState.newLobby("ABC123").liveGameState()).isEmpty();
+    }
+
+    @Test
+    void withGameStateUpdateMergesRatherThanReplaces() {
+        SessionState state = SessionState.newLobby("ABC123")
+                .withGameStateUpdate(java.util.Map.of("teamAScore", 10))
+                .withGameStateUpdate(java.util.Map.of("minutes", 5));
+
+        assertThat(state.liveGameState())
+                .containsEntry("teamAScore", 10)
+                .containsEntry("minutes", 5);
+    }
+
+    @Test
+    void withGameStateUpdateOverwritesAKeyItRepeats() {
+        SessionState state = SessionState.newLobby("ABC123")
+                .withGameStateUpdate(java.util.Map.of("teamAScore", 10))
+                .withGameStateUpdate(java.util.Map.of("teamAScore", 12));
+
+        assertThat(state.liveGameState()).containsEntry("teamAScore", 12);
+    }
 }
