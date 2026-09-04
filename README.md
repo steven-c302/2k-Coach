@@ -39,7 +39,7 @@ vision (FastAPI)        --REST events-->----------+        |
 
 ## Is it fully built? No — here's exactly what works today
 
-**Milestones 1–7 of 10** are done (see the roadmap below). Concretely:
+**Milestones 1–9 of 10** are done (see the roadmap below). Concretely:
 
 - ✅ Real player data with filters, via API and in the browser.
 - ✅ A team builder UI at `/` — filters, team size, era, and a "build around
@@ -56,10 +56,17 @@ vision (FastAPI)        --REST events-->----------+        |
   — see "Data source" below.
 - ✅ Every matchup analysis (session-triggered or bare API call) is appended
   to a DynamoDB history table (`MatchupHistory`), queryable per session.
+- ✅ The whole stack runs from one `docker compose up --build` with real
+  health-check-gated startup ordering, and CI (`.github/workflows/ci.yml`)
+  runs JUnit + Testcontainers, a web typecheck/build, and vision's pytest
+  suite on every push/PR.
 - ❌ Rosters generated in the team builder aren't wired into a session yet —
   you type player ids by hand into the analyze form. No coaching *rules*
   UI (you see the narration, not the raw mismatch list, in the session view).
-  No OCR/vision pipeline. Those are Milestones 8–10 plus follow-on polish.
+  No OCR/vision pipeline. That's Milestone 10, deliberately last per the
+  plan — the hardest, most differentiating piece, and it needs a real "Play
+  Now" capture on your PC to calibrate, not something buildable/verifiable
+  end-to-end in this environment.
 
 So today you can build a roster, run a live join/ready session with a
 friend, and from inside that session trigger a real (or template-narrated)
@@ -244,22 +251,36 @@ See `docs/plan.md` §7 for the full roadmap. Current state:
       feed until Milestone 10's OCR pipeline exists, and the field isn't
       faked to look complete. Verified live for both the session-triggered
       and standalone paths.
-- [ ] Milestone 8 — Full docker-compose (Postgres + core + web + DynamoDB all
-      genuinely wired and used now; vision service builds but has no capture
-      loop yet)
-- [ ] Milestone 9 — GitHub Actions CI
+- [x] **Milestone 8 — Full docker-compose.** All 5 services (Postgres,
+      LocalStack, core, vision, web) come up together with one
+      `docker compose up --build`. `core` now has a real Docker
+      `HEALTHCHECK` (`/actuator/health`), and `vision`/`web` wait on it being
+      *healthy*, not just started — verified by bringing up the whole stack
+      at once and confirming the dependency ordering actually gates on
+      health, then smoke-testing all 5 services.
+- [x] **Milestone 9 — GitHub Actions CI.** `.github/workflows/ci.yml`, 3
+      jobs: `core-tests` (`./gradlew test`, includes a real Testcontainers
+      Postgres integration test — see below), `web-build` (`npm run build`,
+      which typechecks), `vision-tests` (`pytest` against a lightweight
+      dependency set, skipping the heavy OpenCV/EasyOCR/torch stack that
+      `test_health.py`/`test_regions.py` don't touch).
 - [ ] Milestone 10 — Vision microservice (FastAPI app scaffolded with
       `/health`; capture/OCR loop not implemented — calibration profiles in
       `vision/app/capture/regions.py` are unverified placeholders)
 
-`core`'s test suite: 68 JUnit tests, `./gradlew test` (no DB required — the
-rules engine, roster pipeline, and session logic are all tested as pure
-functions or against a mocked repository boundary). The original plan called
-for Testcontainers-backed Postgres integration tests starting at Milestone 4
-("query-shape-sensitive logic... don't mock the DB here") — not added yet;
-everything shipped so far turned out to be pure-logic-testable without one,
-but a Testcontainers suite is still worth adding before this grows further,
-particularly for `PlayerSpecifications`' query correctness.
+`core`'s test suite: 69 JUnit tests, `./gradlew test`. Most are pure-logic or
+mocked-boundary tests (no DB required), but `PlayerRepositoryIntegrationTest`
+is a real Testcontainers-backed Postgres integration test — the plan's
+testing strategy calls this out explicitly for query-shape-sensitive logic
+("don't mock the DB here"), and it's what CI's `core-tests` job actually
+runs. **It fails when run locally in this development sandbox** — Docker's
+CLI works here (used throughout for `docker compose`), but Testcontainers
+talks to the raw Docker Engine API directly over the named pipe, and that
+API is stubbed/restricted in this sandbox regardless of which pipe is
+targeted. This is a local environment restriction, not a code bug — the
+same test runs for real in CI, where GitHub-hosted runners have native
+Docker access; verify a green run at the badge/Actions tab rather than
+trusting a local `./gradlew test` for this one test class specifically.
 
 ## Known gaps / assumptions to verify
 

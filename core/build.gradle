@@ -52,6 +52,13 @@ dependencies {
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	// Testcontainers: the plan's testing strategy calls for real-Postgres
+	// coverage of query-shape-sensitive logic ("don't mock the DB here") —
+	// PlayerRepositoryIntegrationTest is that test, run in CI (Milestone 9).
+	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.testcontainers:postgresql'
 }
 
 tasks.named('test') {
