@@ -8,7 +8,7 @@ body {
 }
 
 main {
-  max-width: 720px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 2rem 1.5rem;
 }
@@ -31,4 +31,205 @@ main {
 .status-pill.error {
   background: rgba(239, 68, 68, 0.15);
   color: #dc2626;
+}
+
+/* Roster builder */
+
+.builder {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.builder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  border-radius: 12px;
+}
+
+.builder-form fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.builder-form legend {
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 0.3rem;
+}
+
+.field-row {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.field-row label,
+.builder-form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.field-row input,
+.field-row select,
+.builder-form > label select {
+  font: inherit;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  background: transparent;
+  color: inherit;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.position-toggles {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.builder-form button[type="submit"] {
+  align-self: flex-start;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.55rem 1.25rem;
+  border-radius: 8px;
+  border: none;
+  background: #16a34a;
+  color: white;
+  cursor: pointer;
+}
+
+.builder-form button[type="submit"]:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Autocomplete */
+
+.autocomplete {
+  position: relative;
+  max-width: 320px;
+}
+
+.autocomplete input {
+  width: 100%;
+  font: inherit;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  background: transparent;
+  color: inherit;
+}
+
+.autocomplete-results {
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: canvas;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  border-radius: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.autocomplete-results li {
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.autocomplete-results li:hover {
+  background: rgba(127, 127, 127, 0.15);
+}
+
+.autocomplete-selected {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  background: rgba(127, 127, 127, 0.12);
+  font-size: 0.9rem;
+}
+
+.autocomplete-selected button {
+  font: inherit;
+  border: none;
+  background: none;
+  color: #dc2626;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Roster result */
+
+.roster-result h2 {
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+  margin-bottom: 0.6rem;
+}
+
+.player-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.player-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+}
+
+.position-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  font-weight: 700;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.player-card-name {
+  font-weight: 600;
+}
+
+.player-card-meta {
+  font-size: 0.8rem;
+  color: #888;
 }

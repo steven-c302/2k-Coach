@@ -39,20 +39,24 @@ vision (FastAPI)        --REST events-->----------+        |
 
 ## Is it fully built? No — here's exactly what works today
 
-Only **Milestones 1–2 of 10** are done (see the roadmap below). Concretely:
+**Milestones 1–5 of 10** are done (see the roadmap below). Concretely:
 
-- ✅ You can run the backend, and it serves real player data with filters.
-- ✅ You can generate a roster via the API (filters, team size, era, and an
-  optional "build around this player" mode) — but only via `curl`/Postman,
-  there's no UI for it yet.
-- ✅ The web app loads and proves it can talk to the backend.
-- ❌ There is no team builder UI (a form + roster display), no live sessions,
-  no matchup analysis, no coaching engine, no LLM narration, and no
-  OCR/vision pipeline yet. Those are all still unbuilt (Milestones 3–10).
+- ✅ Real player data with filters, via API and in the browser.
+- ✅ A team builder UI at `/` — filters, team size, era, and a "build around
+  this player" autocomplete, generating a real roster.
+- ✅ Matchup analysis via API (`POST /api/matchups/analyze`) — deterministic
+  rules, no LLM. Not wired into any UI yet.
+- ✅ Live sessions at `/session` — host/join by code, ready-up, broadcast over
+  WebSocket. Two browser tabs joining the same code see each other update in
+  real time. Rosters/matchups aren't wired into a session yet — it's just
+  join + ready state for now.
+- ❌ No coaching engine, no LLM narration, and no OCR/vision pipeline yet.
+  Those are Milestones 6–10.
 
-So today this is a data + roster-generation API plus a placeholder frontend —
-you could script a roster build against it, but there's nothing to click
-through yet.
+So today you can build a roster, get a rules-based matchup readout via curl,
+and run a live join/ready session with a friend — but nothing connects those
+three yet (a session doesn't know about a generated roster, a matchup isn't
+triggered from inside a session).
 
 ## How to actually run what exists
 
@@ -62,9 +66,11 @@ docker compose up --build
 ```
 
 Then:
-- Open **http://localhost:3000** in a browser — the web app fetches players
-  from core and shows a connectivity status line + a sample list. This is the
-  entire current frontend; there's no navigation beyond it yet.
+- Open **http://localhost:3000** — the team builder: set filters, optionally
+  search a player to build around, hit "Generate roster."
+- Open **http://localhost:3000/session** to host or join a live session —
+  open it in two tabs (or two browsers) with the same code to see ready
+  state and status sync live between them.
 - Or skip the frontend and hit the API directly:
   ```bash
   curl "http://localhost:8080/api/players?position=PG&minOverall=90&era=CURRENT"
@@ -94,6 +100,30 @@ Then:
   pool is shuffled before filling, matching the old randomizer tool's
   behavior. Returns `422` with an error message if the filtered pool can't
   fill the roster (e.g. no players left at a required position).
+- Analyze a matchup (two lists of 5 player ids each):
+  ```bash
+  curl -X POST http://localhost:8080/api/matchups/analyze \
+    -H "Content-Type: application/json" \
+    -d '{"teamAPlayerIds": [5,6,13,21,43], "teamBPlayerIds": [222,232,233,236,242]}'
+  ```
+  Runs 4 deterministic rules (`ThreePointVolumeRule`, `PostSizeRule`,
+  `SpeedMismatchRule`, `BadgeExploitRule`) and returns any mismatches found —
+  category, which team it favors, severity, and a plain-English evidence
+  string. **In practice this returns `{"mismatches": []}` against the seeded
+  demo data**, because the local-scraper fallback has no attributes or badges
+  to compare — the rules correctly stay silent rather than fabricate a
+  result from missing data. Sync real attribute data from nba2kapi (below) to
+  see it actually fire, or see the "Known gaps" section for how this was
+  verified.
+- Live sessions:
+  ```bash
+  curl -X POST http://localhost:8080/api/sessions   # {"code": "K3F9QZ"}
+  ```
+  Then connect over STOMP to `ws://localhost:8080/ws`, subscribe to
+  `/topic/sessions/{code}`, and send a join frame to
+  `/app/sessions/{code}/join` with `{"clientId": "...", "role": "HOST"|"GUEST"}`
+  — the web app's `/session/{code}` page does exactly this
+  (`@stomp/stompjs`), it's the easiest way to see it work.
 - `vision` → http://localhost:8001/health (health check only — no capture
   loop exists yet, see Milestone 10 below)
 - Postgres → localhost:5432, LocalStack DynamoDB → localhost:4566 (unused
@@ -139,11 +169,26 @@ See `docs/plan.md` §7 for the full roadmap. Current state:
 - [x] **Milestone 2 — Team builder API.** `RosterCriterion` pipeline
       (`OverallRangeCriterion`, `PositionCriterion`, `EraCriterion`,
       `BuildAroundPlayerCriterion`), ported starter/bench selection
-      (`RosterFillService`), `POST /api/rosters/generate`. 28 JUnit tests.
-- [ ] Milestone 3 — Next.js team builder UI (only a connectivity smoke-test
-      page exists today, `web/app/page.tsx`)
-- [ ] Milestone 4 — Matchup rules engine
-- [ ] Milestone 5 — Live sessions over WebSocket
+      (`RosterFillService`), `POST /api/rosters/generate`.
+- [x] **Milestone 3 — Next.js team builder UI.** Form + roster display at
+      `/` (`RosterBuilderForm`, `PlayerAutocomplete`, `RosterResult`), proxied
+      through Next.js route handlers so the browser never talks to core
+      directly.
+- [x] **Milestone 4 — Matchup rules engine.** `MismatchRule` pipeline
+      (`ThreePointVolumeRule`, `PostSizeRule`, `SpeedMismatchRule`,
+      `BadgeExploitRule`) over a pure `TeamSnapshot`, `POST
+      /api/matchups/analyze`. `SpeedMismatchRule` is adapted from the plan's
+      spec (speed vs. speed, not speed vs. an untracked "lateral quickness"
+      attribute) — see `SpeedMismatchRule`'s javadoc.
+- [x] **Milestone 5 — Live sessions over WebSocket.** Per-session
+      single-writer actor (`SessionActor`, virtual-thread executor) behind a
+      `ConcurrentHashMap<String, SessionActor>` registry (`SessionRegistry`);
+      STOMP endpoints for join/ready (`SessionWebSocketController`),
+      broadcasting a new immutable `SessionState` snapshot after each
+      processed mutation. `/session` in the web app demos it — verified live
+      with two browser tabs sharing state, and with a 500-mutation/50-thread
+      concurrency test (`SessionActorConcurrencyTest`) proving no lost
+      updates.
 - [ ] Milestone 6 — Async/versioned LLM narration
 - [ ] Milestone 7 — DynamoDB matchup history
 - [ ] Milestone 8 — Full docker-compose (Postgres + core + web wired today;
@@ -153,6 +198,15 @@ See `docs/plan.md` §7 for the full roadmap. Current state:
 - [ ] Milestone 10 — Vision microservice (FastAPI app scaffolded with
       `/health`; capture/OCR loop not implemented — calibration profiles in
       `vision/app/capture/regions.py` are unverified placeholders)
+
+`core`'s test suite: 58 JUnit tests, `./gradlew test` (no DB required — the
+rules engine, roster pipeline, and session logic are all tested as pure
+functions or against a mocked repository boundary). The original plan called
+for Testcontainers-backed Postgres integration tests starting at Milestone 4
+("query-shape-sensitive logic... don't mock the DB here") — not added yet;
+everything shipped so far turned out to be pure-logic-testable without one,
+but a Testcontainers suite is still worth adding before this grows further,
+particularly for `PlayerSpecifications`' query correctness.
 
 ## Known gaps / assumptions to verify
 
@@ -168,14 +222,22 @@ See `docs/plan.md` §7 for the full roadmap. Current state:
 - **`vision`**'s HUD calibration coordinates are placeholders —
   they need to be measured against a real "Play Now" capture at your actual
   play resolution before OCR produces anything meaningful.
-- **Duplicate players in the local-scraper seed data**: a player who changed
-  teams (e.g. LeBron James: Cavaliers/Heat/Lakers) gets one row per team stint
-  *even within the `CURRENT` era*, since each `(name, team, eraTag)` combo is
-  a distinct row and the scraper didn't dedupe by real-world person. A
-  generated roster can end up listing "the same player" twice under different
-  teams — confirmed live via `POST /api/rosters/generate`. This is a data
-  quality gap in `nba2k-data-scraper`'s output, not a bug in the roster
-  pipeline; fixing it means deduplicating `players.json` (e.g. keep only each
-  player's most recent team per era) or, better, relying on nba2kapi instead
-  of the local-scraper fallback, since nba2kapi's `/api/players` returns one
-  row per player with their current team.
+- **Multiple entries per player in the local-scraper seed data** (e.g. LeBron
+  James: Cavaliers/Heat/Lakers, each a separate row even within the `CURRENT`
+  era): this is intentional, not a data quality bug — 2K itself lists a
+  player's different team-stint versions as distinct cards, and the roster
+  pipeline correctly treats them as distinct players. No fix needed.
+- **Matchup rules return nothing against the demo dataset**: `BadgeExploitRule`
+  needs badge data and all four rules need attribute data, neither of which
+  the local-scraper fallback provides (see Milestone 1). Verified this is
+  working-as-designed, not broken, by temporarily inserting real attribute
+  rows via `psql` and confirming `ThreePointVolumeRule` fired correctly with
+  the right severity and evidence text — then removed the test data. Sync
+  from nba2kapi for this to be meaningful against real data.
+- **A core restart drops live sessions from memory.** `SessionActor`s live
+  only in `SessionRegistry`'s in-process map; the `sessions` Postgres row
+  persists, but nothing rehydrates an actor from it on startup. `GET
+  /api/sessions/{code}` and any WebSocket join for a session created before
+  the last restart will 404 / silently no-op. Rehydration on
+  `ApplicationReadyEvent` (mirroring `SyncScheduler`'s bootstrap pattern) is
+  the natural fix, not yet built.
