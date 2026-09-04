@@ -14,7 +14,7 @@ public record PlayerResponse(
         PlayerAttributesResponse attributes
 ) {
 
-    static PlayerResponse from(Player player) {
+    public static PlayerResponse from(Player player) {
         PlayerAttributesResponse attrs = player.getAttributes() == null ? null
                 : PlayerAttributesResponse.from(player.getAttributes());
         return new PlayerResponse(

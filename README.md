@@ -39,16 +39,20 @@ vision (FastAPI)        --REST events-->----------+        |
 
 ## Is it fully built? No — here's exactly what works today
 
-Only **Milestone 1 of 10** is done (see the roadmap below). Concretely:
+Only **Milestones 1–2 of 10** are done (see the roadmap below). Concretely:
 
 - ✅ You can run the backend, and it serves real player data with filters.
+- ✅ You can generate a roster via the API (filters, team size, era, and an
+  optional "build around this player" mode) — but only via `curl`/Postman,
+  there's no UI for it yet.
 - ✅ The web app loads and proves it can talk to the backend.
-- ❌ There is no team builder UI, no live sessions, no matchup analysis, no
-  coaching engine, no LLM narration, and no OCR/vision pipeline yet. Those
-  are all still unbuilt (Milestones 2–10).
+- ❌ There is no team builder UI (a form + roster display), no live sessions,
+  no matchup analysis, no coaching engine, no LLM narration, and no
+  OCR/vision pipeline yet. Those are all still unbuilt (Milestones 3–10).
 
-So today this is a data API plus a placeholder frontend, not something you'd
-sit down and use to build a fantasy roster or get live coaching yet.
+So today this is a data + roster-generation API plus a placeholder frontend —
+you could script a roster build against it, but there's nothing to click
+through yet.
 
 ## How to actually run what exists
 
@@ -67,6 +71,29 @@ Then:
   ```
   Query params: `position`, `minOverall`, `maxOverall`, `era` (`CURRENT` or a
   classic-team year like `1996`), `name` (substring match).
+- Generate a roster:
+  ```bash
+  curl -X POST http://localhost:8080/api/rosters/generate \
+    -H "Content-Type: application/json" \
+    -d '{
+      "criteria": [
+        {"type": "OVERALL_RANGE", "min": 85, "max": 99},
+        {"type": "POSITION", "allowed": ["PG","SG","SF","PF","C"]},
+        {"type": "BUILD_AROUND", "playerId": 43}
+      ],
+      "teamSize": 8,
+      "era": "CURRENT"
+    }'
+  ```
+  `criteria` is an ordered pipeline (each filters/reorders the output of the
+  one before it) — `OVERALL_RANGE`, `POSITION`, and `BUILD_AROUND` are all
+  optional and composable. `BUILD_AROUND` pins that player as their
+  position's starter and ranks the rest of the pool by how well they
+  complement the anchor's attributes (only meaningful once real attribute
+  data is synced from nba2kapi — see below). Without `BUILD_AROUND`, the
+  pool is shuffled before filling, matching the old randomizer tool's
+  behavior. Returns `422` with an error message if the filtered pool can't
+  fill the roster (e.g. no players left at a required position).
 - `vision` → http://localhost:8001/health (health check only — no capture
   loop exists yet, see Milestone 10 below)
 - Postgres → localhost:5432, LocalStack DynamoDB → localhost:4566 (unused
@@ -109,7 +136,10 @@ See `docs/plan.md` §7 for the full roadmap. Current state:
 
 - [x] **Milestone 1 — Data foundation.** Postgres schema (Flyway), nba2kapi
       sync job + JSON seed fallback, `GET /api/players` with filters.
-- [ ] Milestone 2 — Team builder API (`RosterCriterion` pipeline)
+- [x] **Milestone 2 — Team builder API.** `RosterCriterion` pipeline
+      (`OverallRangeCriterion`, `PositionCriterion`, `EraCriterion`,
+      `BuildAroundPlayerCriterion`), ported starter/bench selection
+      (`RosterFillService`), `POST /api/rosters/generate`. 28 JUnit tests.
 - [ ] Milestone 3 — Next.js team builder UI (only a connectivity smoke-test
       page exists today, `web/app/page.tsx`)
 - [ ] Milestone 4 — Matchup rules engine
@@ -138,3 +168,14 @@ See `docs/plan.md` §7 for the full roadmap. Current state:
 - **`vision`**'s HUD calibration coordinates are placeholders —
   they need to be measured against a real "Play Now" capture at your actual
   play resolution before OCR produces anything meaningful.
+- **Duplicate players in the local-scraper seed data**: a player who changed
+  teams (e.g. LeBron James: Cavaliers/Heat/Lakers) gets one row per team stint
+  *even within the `CURRENT` era*, since each `(name, team, eraTag)` combo is
+  a distinct row and the scraper didn't dedupe by real-world person. A
+  generated roster can end up listing "the same player" twice under different
+  teams — confirmed live via `POST /api/rosters/generate`. This is a data
+  quality gap in `nba2k-data-scraper`'s output, not a bug in the roster
+  pipeline; fixing it means deduplicating `players.json` (e.g. keep only each
+  player's most recent team per era) or, better, relying on nba2kapi instead
+  of the local-scraper fallback, since nba2kapi's `/api/players` returns one
+  row per player with their current team.
