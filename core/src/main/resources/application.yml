@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: nba2k-assistant-core
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:nba2kassistant}
+    username: ${DB_USER:nba2kassistant}
+    password: ${DB_PASSWORD:nba2kassistant}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema; Hibernate only validates it matches the entities
+      # so a mismatched entity fails fast at startup instead of silently altering tables.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: ${SERVER_PORT:8080}
+
+nba2kassistant:
+  nba2kapi:
+    base-url: ${NBA2KAPI_BASE_URL:https://api.nba2kapi.com}
+    api-key: ${NBA2KAPI_API_KEY:}
+    team-type: ${NBA2KAPI_TEAM_TYPE:curr}
+  seed:
+    # Bootstrap fallback used when no NBA2KAPI_API_KEY is configured — see
+    # JsonSeedLoader. Points at the existing scraper output, copied into
+    # resources/seed/players.json.
+    players-json-path: ${NBA2KASSISTANT_SEED_PATH:classpath:seed/players.json}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

@@ -1,0 +1,27 @@
+# Java / Gradle
+core/build/
+core/.gradle/
+core/bin/
+!core/gradle/wrapper/gradle-wrapper.jar
+
+# Node / Next.js
+web/node_modules/
+web/.next/
+web/out/
+
+# Python
+vision/.venv/
+vision/__pycache__/
+vision/**/__pycache__/
+vision/.pytest_cache/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store

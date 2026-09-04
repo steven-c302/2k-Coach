@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nba2kassistant
+      POSTGRES_USER: nba2kassistant
+      POSTGRES_PASSWORD: nba2kassistant
+    ports:
+      - "5432:5432"
+    volumes:
+      - nba2kassistant-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nba2kassistant -d nba2kassistant"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  localstack:
+    image: localstack/localstack:3.7
+    environment:
+      SERVICES: dynamodb
+      DEFAULT_REGION: us-east-1
+    ports:
+      - "4566:4566"
+    volumes:
+      - nba2kassistant-localstack-data:/var/lib/localstack
+
+  core:
+    build: ./core
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: nba2kassistant
+      DB_USER: nba2kassistant
+      DB_PASSWORD: nba2kassistant
+      NBA2KAPI_API_KEY: ${NBA2KAPI_API_KEY:-}
+      NBA2KAPI_TEAM_TYPE: ${NBA2KAPI_TEAM_TYPE:-curr}
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: us-east-1
+      DYNAMODB_ENDPOINT: http://localstack:4566
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+
+  vision:
+    build: ./vision
+    environment:
+      NBA2K_VISION_CORE_BASE_URL: http://core:8080
+    ports:
+      - "8001:8001"
+    depends_on:
+      - core
+
+  web:
+    build: ./web
+    environment:
+      CORE_BASE_URL: http://core:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - core
+
+volumes:
+  nba2kassistant-postgres-data:
+  nba2kassistant-localstack-data:
