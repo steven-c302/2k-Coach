@@ -57,9 +57,11 @@ vision (FastAPI)        --REST events-->----------+        |
 - ✅ Every matchup analysis (session-triggered or bare API call) is appended
   to a DynamoDB history table (`MatchupHistory`), queryable per session.
 - ✅ The whole stack runs from one `docker compose up --build` with real
-  health-check-gated startup ordering, and CI (`.github/workflows/ci.yml`)
-  runs JUnit + Testcontainers, a web typecheck/build, and vision's pytest
-  suite on every push/PR.
+  health-check-gated startup ordering, and CI (Continuous Integration —
+  automated checks that run on every push/PR so a broken change gets caught
+  before it lands, not whenever someone happens to test it manually; see
+  `.github/workflows/ci.yml`) runs JUnit + Testcontainers, a web
+  typecheck/build, and vision's pytest suite automatically on every push/PR.
 - ✅ A real capture → preprocess → OCR → parse → emit pipeline in `vision`
   (`mss` capture, OpenCV crop/threshold/upscale, EasyOCR, regex parsing into
   structured events), controllable per-session via `/api/capture/start`
@@ -83,6 +85,65 @@ async/staleness handling and an auditable DynamoDB trail, and either tap
 out the score by hand or (once calibrated on your PC) let OCR read it off
 the screen automatically — genuinely the whole system the resume describes,
 not a subset of it.
+
+## Demo script
+
+A walkthrough that touches every built milestone, in order — good for
+showing this to someone else (or yourself) end to end. Individual endpoints
+and curl commands are in "How to actually run what exists" below; this is
+the narrative version.
+
+1. **Start everything.**
+   ```bash
+   cp .env.example .env   # optional: add NBA2KAPI_API_KEY / ANTHROPIC_API_KEY here first
+   docker compose up --build
+   ```
+   Wait for `core-1` to log `Started Nba2kAssistantApplication` — the other
+   two services wait on its health check automatically, so if `web`/`vision`
+   are up, `core` is already ready.
+
+2. **Team builder** (Milestones 1–3). Open **http://localhost:3000**. Check
+   "Overall range" (80–99 is prefilled), search a player in "Build around a
+   player" (try "LeBron" — you'll see multiple team-stint entries, that's
+   intentional, see "Known gaps"), pick one, hit **Generate roster**. You get
+   a real 5-starter/N-bench roster with your anchor pinned to their position.
+
+3. **Live session, two tabs** (Milestone 5). Open
+   **http://localhost:3000/session** in one tab, click **Host a new
+   session** — you're redirected to `/session/{code}?role=HOST`. Copy that
+   code, open a second tab (or another browser) at
+   `http://localhost:3000/session/{code}?role=GUEST`. Click **Mark ready**
+   in both tabs — watch both flip to `ACTIVE` live, with no page refresh.
+
+4. **Matchup + coaching narration** (Milestones 4, 6). Still in a session
+   tab: get some real player ids first (`curl "http://localhost:8080/api/players?era=CURRENT&minOverall=90"`
+   and grab 5 ids), paste 5 comma-separated ids into each "Team A"/"Team B"
+   box under "Analyze a matchup," click **Analyze matchup**. A narrated tip
+   broadcasts to *both* tabs a moment later (it's the free
+   `TemplateNarrationClient` unless you set `ANTHROPIC_API_KEY`). Click
+   **Refresh coaching log** to see the `DELIVERED` row backing it.
+
+5. **Manual tap-tracker** (Milestone 10, fallback path). In the same
+   session, tap **+2**/**+3** under "Manual tap-tracker" for either team —
+   watch "Live observed state" update in both tabs, the same broadcast path
+   real OCR events would use.
+
+6. **The auditable trails** (Milestones 6, 7) — the concrete proof behind
+   the async/versioning and history claims, not just code:
+   ```bash
+   curl http://localhost:8080/api/sessions/{code}/coaching-log
+   curl http://localhost:8080/api/matchups/history/{code}
+   ```
+
+7. **Tests + CI.** `cd core && ./gradlew test` (77 tests; one Testcontainers
+   class is blocked by this dev sandbox specifically — see the note further
+   down) — or just check the green checkmarks at
+   `github.com/steven-c302/2k-Coach/actions`, which is the real proof since
+   it runs on unrestricted infrastructure.
+
+8. **Vision/OCR** — only if you're at your gaming PC with NBA 2K running
+   (not this demo path): see "Vision pipeline" below before expecting
+   anything meaningful here.
 
 ## How to actually run what exists
 
