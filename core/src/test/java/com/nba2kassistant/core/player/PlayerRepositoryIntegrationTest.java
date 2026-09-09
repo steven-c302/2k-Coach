@@ -49,7 +49,8 @@ class PlayerRepositoryIntegrationTest {
         save("Test SG", "SG", 90, "ZZTEST_POSITION");
         save("Test PG Low", "PG", 60, "ZZTEST_POSITION");
 
-        List<PlayerResponse> result = playerService.search(new PlayerSearchRequest("PG", 80, 99, "ZZTEST_POSITION", null));
+        List<PlayerResponse> result = playerService.search(
+                new PlayerSearchRequest("PG", 80, 99, "ZZTEST_POSITION", null, null, null, null, null, null, null, null, null, null));
 
         assertThat(result).extracting(PlayerResponse::name).containsExactly("Test PG");
     }
@@ -59,7 +60,8 @@ class PlayerRepositoryIntegrationTest {
         save("Isolated Era Player", "PG", 90, "ZZTEST_ERA_ONE");
         save("Other Era Player", "PG", 90, "ZZTEST_ERA_TWO");
 
-        List<PlayerResponse> result = playerService.search(new PlayerSearchRequest(null, null, null, "ZZTEST_ERA_ONE", null));
+        List<PlayerResponse> result = playerService.search(
+                new PlayerSearchRequest(null, null, null, "ZZTEST_ERA_ONE", null, null, null, null, null, null, null, null, null, null));
 
         assertThat(result).extracting(PlayerResponse::name).containsExactly("Isolated Era Player");
     }
@@ -70,7 +72,7 @@ class PlayerRepositoryIntegrationTest {
         save("Zzzephyr James", "SF", 99, "ZZTEST_NAME");
 
         List<PlayerResponse> result = playerService.search(
-                new PlayerSearchRequest(null, null, null, "ZZTEST_NAME", "zzzephyr jordan"));
+                new PlayerSearchRequest(null, null, null, "ZZTEST_NAME", null, "zzzephyr jordan", null, null, null, null, null, null, null, null));
 
         assertThat(result).extracting(PlayerResponse::name).containsExactly("Zzzephyr Jordan");
     }

@@ -1,12 +1,9 @@
 package com.nba2kassistant.core.coaching;
 
-import com.nba2kassistant.core.matchup.dto.MismatchResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 /**
  * Real client + local fallback, same shape as NbaTwoKApiClient/JsonSeedLoader
@@ -34,15 +31,15 @@ public class LlmClientSelector implements LlmClient {
     }
 
     @Override
-    public String narrate(List<MismatchResponse> mismatches) {
+    public String narrate(NarrationContext context) {
         if (!anthropicClient.isConfigured()) {
-            return templateClient.narrate(mismatches);
+            return templateClient.narrate(context);
         }
         try {
-            return anthropicClient.narrate(mismatches);
+            return anthropicClient.narrate(context);
         } catch (Exception e) {
             log.warn("Anthropic narration call failed, falling back to template narration: {}", e.getMessage());
-            return templateClient.narrate(mismatches);
+            return templateClient.narrate(context);
         }
     }
 }

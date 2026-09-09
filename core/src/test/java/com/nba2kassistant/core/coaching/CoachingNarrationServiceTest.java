@@ -2,6 +2,7 @@ package com.nba2kassistant.core.coaching;
 
 import com.nba2kassistant.core.matchup.MatchupAnalysisService;
 import com.nba2kassistant.core.matchup.dto.MatchupAnalysisResponse;
+import com.nba2kassistant.core.player.PlayerRepository;
 import com.nba2kassistant.core.session.SessionActor;
 import com.nba2kassistant.core.session.SessionState;
 import org.junit.jupiter.api.AfterEach;
@@ -38,6 +39,8 @@ class CoachingNarrationServiceTest {
     private MatchupAnalysisService matchupAnalysisService;
     @Mock
     private CoachingEventLogRepository coachingEventLogRepository;
+    @Mock
+    private PlayerRepository playerRepository;
 
     private final ExecutorService llmExecutor = Executors.newFixedThreadPool(4);
 
@@ -49,6 +52,7 @@ class CoachingNarrationServiceTest {
     @Test
     void discardsAStaleResponseWhenANewerRequestIsDeliveredFirst() throws InterruptedException {
         when(matchupAnalysisService.analyze(any())).thenReturn(new MatchupAnalysisResponse(List.of()));
+        when(playerRepository.findAllById(any())).thenReturn(List.of());
 
         SessionActor actor = new SessionActor(SessionState.newLobby("ABC123"), state -> {
         });
@@ -58,7 +62,7 @@ class CoachingNarrationServiceTest {
         CountDownLatch releaseA = new CountDownLatch(1);
         AtomicInteger callCount = new AtomicInteger(0);
 
-        LlmClient fakeLlmClient = mismatches -> {
+        LlmClient fakeLlmClient = context -> {
             if (callCount.incrementAndGet() == 1) {
                 aStarted.countDown();
                 awaitUninterruptibly(releaseA);
@@ -68,7 +72,7 @@ class CoachingNarrationServiceTest {
         };
 
         CoachingNarrationService service = new CoachingNarrationService(
-                matchupAnalysisService, fakeLlmClient, coachingEventLogRepository, llmExecutor);
+                matchupAnalysisService, fakeLlmClient, coachingEventLogRepository, playerRepository, llmExecutor);
 
         // Request A starts and blocks inside the "LLM call" — simulating a slow response.
         service.requestNarration("ABC123", requestVersionA, List.of(1L), List.of(2L), actor);

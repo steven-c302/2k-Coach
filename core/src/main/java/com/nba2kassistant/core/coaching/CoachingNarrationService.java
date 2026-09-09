@@ -4,6 +4,7 @@ import com.nba2kassistant.core.matchup.MatchupAnalysisService;
 import com.nba2kassistant.core.matchup.dto.MatchupAnalysisResponse;
 import com.nba2kassistant.core.matchup.dto.MatchupAnalyzeRequest;
 import com.nba2kassistant.core.matchup.dto.MismatchResponse;
+import com.nba2kassistant.core.player.PlayerRepository;
 import com.nba2kassistant.core.session.SessionActor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,12 @@ import java.util.stream.Collectors;
  * if the session has moved to a newer version in the meantime — a stale
  * narration for an old game state would be actively misleading, worse than
  * no narration at all.
+ *
+ * <p>"Analyze" can be re-triggered any time with the same two rosters — e.g.
+ * after every timeout — and each call picks up whatever the session's
+ * {@code liveGameState} looks like at that moment (see NarrationContext), so
+ * a re-analysis mid-game reacts to the score/clock instead of just repeating
+ * the pre-game comparison.
  */
 @Service
 public class CoachingNarrationService {
@@ -33,17 +40,20 @@ public class CoachingNarrationService {
     private final MatchupAnalysisService matchupAnalysisService;
     private final LlmClient llmClient;
     private final CoachingEventLogRepository coachingEventLogRepository;
+    private final PlayerRepository playerRepository;
     private final ExecutorService llmExecutor;
 
     public CoachingNarrationService(
             MatchupAnalysisService matchupAnalysisService,
             LlmClient llmClient,
             CoachingEventLogRepository coachingEventLogRepository,
+            PlayerRepository playerRepository,
             @Qualifier("llmExecutor") ExecutorService llmExecutor
     ) {
         this.matchupAnalysisService = matchupAnalysisService;
         this.llmClient = llmClient;
         this.coachingEventLogRepository = coachingEventLogRepository;
+        this.playerRepository = playerRepository;
         this.llmExecutor = llmExecutor;
     }
 
@@ -54,13 +64,26 @@ public class CoachingNarrationService {
         MatchupAnalysisResponse analysis = matchupAnalysisService.analyze(
                 new MatchupAnalyzeRequest(teamAPlayerIds, teamBPlayerIds, sessionCode));
 
+        NarrationContext context = new NarrationContext(
+                analysis.mismatches(),
+                actor.currentState().liveGameState(),
+                describeRoster(teamAPlayerIds),
+                describeRoster(teamBPlayerIds)
+        );
+
         CompletableFuture
-                .supplyAsync(() -> llmClient.narrate(analysis.mismatches()), llmExecutor)
+                .supplyAsync(() -> llmClient.narrate(context), llmExecutor)
                 .thenAccept(narration -> onNarrationReady(sessionCode, requestVersion, requestedAt, analysis, narration, actor))
                 .exceptionally(ex -> {
                     log.error("Coaching narration failed for session {} requestVersion={}", sessionCode, requestVersion, ex);
                     return null;
                 });
+    }
+
+    private List<String> describeRoster(List<Long> playerIds) {
+        return playerRepository.findAllById(playerIds).stream()
+                .map(p -> "%s (%s, %d OVR)".formatted(p.getName(), p.getPosition(), p.getOverall()))
+                .toList();
     }
 
     private void onNarrationReady(

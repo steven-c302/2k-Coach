@@ -33,7 +33,7 @@ class RosterFillServiceTest {
         List<Player> ordered = List.of(pgA, sgA, sfA, pfA, cA, pgB, sgB, sfB);
         RosterBuildContext ctx = new RosterBuildContext(8, "CURRENT", null);
 
-        GeneratedRoster result = service.fill(ordered, ctx);
+        GeneratedRoster result = service.fill(ordered, ordered, ctx);
 
         assertThat(result.starters()).extracting(Player::getName)
                 .containsExactly("PG_B", "SG_A", "SF_A", "PF_A", "C_A");
@@ -53,7 +53,7 @@ class RosterFillServiceTest {
         List<Player> ordered = List.of(sgA, sfA, pfA, cA, strongPg); // anchor excluded, as BuildAroundPlayerCriterion would do
         RosterBuildContext ctx = new RosterBuildContext(6, "CURRENT", anchor);
 
-        GeneratedRoster result = service.fill(ordered, ctx);
+        GeneratedRoster result = service.fill(ordered, ordered, ctx);
 
         assertThat(result.starters()).extracting(Player::getName)
                 .containsExactly("Anchor", "SG_A", "SF_A", "PF_A", "C_A");
@@ -71,7 +71,7 @@ class RosterFillServiceTest {
         );
         RosterBuildContext ctx = new RosterBuildContext(5, "CURRENT", null);
 
-        assertThatThrownBy(() -> service.fill(ordered, ctx))
+        assertThatThrownBy(() -> service.fill(ordered, ordered, ctx))
                 .isInstanceOf(RosterGenerationException.class)
                 .hasMessageContaining("C");
     }
@@ -80,7 +80,7 @@ class RosterFillServiceTest {
     void throwsWhenTeamSizeIsOutOfBounds() {
         RosterBuildContext ctx = new RosterBuildContext(16, "CURRENT", null);
 
-        assertThatThrownBy(() -> service.fill(List.of(), ctx))
+        assertThatThrownBy(() -> service.fill(List.of(), List.of(), ctx))
                 .isInstanceOf(RosterGenerationException.class);
     }
 }

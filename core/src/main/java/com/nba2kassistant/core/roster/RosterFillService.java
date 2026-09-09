@@ -63,7 +63,11 @@ public class RosterFillService {
         }
 
         for (String position : positionsToFill) {
-            Player pick = pickForSlot(preferred, unrestricted, Set.of(position), quota, average);
+            // false: a required starting position must actually be filled by that position - never
+            // silently substitute a different position, that would just surface as a confusing
+            // "no player found for starting position X" from the recomputation step below instead
+            // of this clear one.
+            Player pick = pickForSlot(preferred, unrestricted, Set.of(position), quota, average, false);
             if (pick == null) {
                 throw new RosterGenerationException("Not enough players available at position " + position);
             }
@@ -110,7 +114,9 @@ public class RosterFillService {
             Set<String> allowedPositions = new LinkedHashSet<>(REQUIRED_POSITIONS);
             allowedPositions.removeAll(usedInBlock);
 
-            Player pick = pickForSlot(preferred, unrestricted, allowedPositions, quota, average);
+            // true: bench position diversity is a soft preference - fall back to any position
+            // rather than fail the whole roster when the pool can't keep the block fully distinct.
+            Player pick = pickForSlot(preferred, unrestricted, allowedPositions, quota, average, true);
             if (pick == null) {
                 throw new RosterGenerationException("Not enough players available for bench spots");
             }
@@ -122,7 +128,7 @@ public class RosterFillService {
     }
 
     private Player pickForSlot(List<Player> preferred, List<Player> unrestricted, Set<String> allowedPositions,
-                                QuotaState quota, AverageState average) {
+                                QuotaState quota, AverageState average, boolean allowAnyPositionFallback) {
         // quota.record() below is the single source of truth for decrementing both counters - it
         // fires for every pick, quota-seeking or not, so a naturally-qualifying default/average
         // pick still counts. The seeking branches here only choose WHICH player, never decrement.
@@ -147,10 +153,10 @@ public class RosterFillService {
         if (pick == null) {
             pick = firstMatch(unrestricted, p -> allowedPositions.contains(p.getPosition()));
         }
-        if (pick == null) {
+        if (pick == null && allowAnyPositionFallback) {
             pick = firstMatch(preferred, p -> true);
         }
-        if (pick == null) {
+        if (pick == null && allowAnyPositionFallback) {
             pick = firstMatch(unrestricted, p -> true);
         }
 
