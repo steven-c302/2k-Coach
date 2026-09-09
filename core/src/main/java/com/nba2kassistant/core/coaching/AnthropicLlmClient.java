@@ -59,13 +59,17 @@ class AnthropicLlmClient {
     String narrate(NarrationContext context) {
         String prompt = buildPrompt(context);
 
-        MessageCreateParams params = MessageCreateParams.builder()
+        // effort is an Opus/Sonnet 5+ tuning knob - Haiku 4.5 (the configured default) rejects the
+        // parameter outright with a 400, so it's only safe to send on a model that supports it.
+        MessageCreateParams.Builder builder = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(1024L)
                 .system(SYSTEM_PROMPT)
-                .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build())
-                .addUserMessage(prompt)
-                .build();
+                .addUserMessage(prompt);
+        if (model.startsWith("claude-opus-5") || model.startsWith("claude-sonnet-5")) {
+            builder.outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build());
+        }
+        MessageCreateParams params = builder.build();
 
         Message response = client.messages().create(params);
         return response.content().stream()
