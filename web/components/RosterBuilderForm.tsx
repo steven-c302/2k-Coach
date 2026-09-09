@@ -20,6 +20,32 @@ async function requestRoster(criteria: RosterCriterionSpec[], teamSize: number, 
 
 const POSITIONS = ["PG", "SG", "SF", "PF", "C"];
 
+// A plain `value={n}` on a number input snaps back to "0" the instant the field is cleared while
+// typing, and that stray "0" then gets a new digit typed in front of or behind it (e.g. clearing
+// then typing "90" comes out "090"). Displaying 0 as an empty field sidesteps that - an empty
+// field commits as 0 anyway, which is exactly "leave it blank and it defaults to 0."
+function NumberField({
+  value,
+  onChange,
+  min,
+  max,
+}: {
+  value: number;
+  onChange: (next: number) => void;
+  min?: number;
+  max?: number;
+}) {
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      value={value === 0 ? "" : value}
+      onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+    />
+  );
+}
+
 type TeamGenSettings = {
   useOverallRange: boolean;
   minOverall: number;
@@ -105,23 +131,11 @@ function TeamSettingsPanel({
         <div className="field-row">
           <label>
             Min
-            <input
-              type="number"
-              min={0}
-              max={99}
-              value={settings.minOverall}
-              onChange={(e) => set("minOverall", Number(e.target.value))}
-            />
+            <NumberField min={0} max={99} value={settings.minOverall} onChange={(v) => set("minOverall", v)} />
           </label>
           <label>
             Max
-            <input
-              type="number"
-              min={0}
-              max={99}
-              value={settings.maxOverall}
-              onChange={(e) => set("maxOverall", Number(e.target.value))}
-            />
+            <NumberField min={0} max={99} value={settings.maxOverall} onChange={(v) => set("maxOverall", v)} />
           </label>
         </div>
       )}
@@ -138,23 +152,11 @@ function TeamSettingsPanel({
         <div className="field-row">
           <label>
             At least
-            <input
-              type="number"
-              min={0}
-              max={15}
-              value={settings.aboveCount}
-              onChange={(e) => set("aboveCount", Number(e.target.value))}
-            />
+            <NumberField min={0} max={15} value={settings.aboveCount} onChange={(v) => set("aboveCount", v)} />
           </label>
           <label>
             players &ge; OVR
-            <input
-              type="number"
-              min={0}
-              max={99}
-              value={settings.aboveThreshold}
-              onChange={(e) => set("aboveThreshold", Number(e.target.value))}
-            />
+            <NumberField min={0} max={99} value={settings.aboveThreshold} onChange={(v) => set("aboveThreshold", v)} />
           </label>
         </div>
       )}
@@ -171,23 +173,11 @@ function TeamSettingsPanel({
         <div className="field-row">
           <label>
             At least
-            <input
-              type="number"
-              min={0}
-              max={15}
-              value={settings.belowCount}
-              onChange={(e) => set("belowCount", Number(e.target.value))}
-            />
+            <NumberField min={0} max={15} value={settings.belowCount} onChange={(v) => set("belowCount", v)} />
           </label>
           <label>
             players &le; OVR
-            <input
-              type="number"
-              min={0}
-              max={99}
-              value={settings.belowThreshold}
-              onChange={(e) => set("belowThreshold", Number(e.target.value))}
-            />
+            <NumberField min={0} max={99} value={settings.belowThreshold} onChange={(v) => set("belowThreshold", v)} />
           </label>
         </div>
       )}
@@ -204,13 +194,7 @@ function TeamSettingsPanel({
         <div className="field-row">
           <label>
             Average OVR
-            <input
-              type="number"
-              min={0}
-              max={99}
-              value={settings.targetAverage}
-              onChange={(e) => set("targetAverage", Number(e.target.value))}
-            />
+            <NumberField min={0} max={99} value={settings.targetAverage} onChange={(v) => set("targetAverage", v)} />
           </label>
         </div>
       )}
@@ -232,7 +216,7 @@ function TeamSettingsPanel({
 }
 
 export default function RosterBuilderForm() {
-  const [teamSize, setTeamSize] = useState(8);
+  const [teamSize, setTeamSize] = useState(10);
   const [era, setEra] = useState("CURRENT");
 
   const [usePositionFilter, setUsePositionFilter] = useState(false);
@@ -308,13 +292,7 @@ export default function RosterBuilderForm() {
         <div className="field-row">
           <label>
             Team size
-            <input
-              type="number"
-              min={5}
-              max={15}
-              value={teamSize}
-              onChange={(e) => setTeamSize(Number(e.target.value))}
-            />
+            <NumberField min={5} max={15} value={teamSize} onChange={setTeamSize} />
           </label>
           <label>
             Era

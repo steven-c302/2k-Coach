@@ -11,6 +11,16 @@ function average(players: PlayerSummary[]): number {
   return Math.round(players.reduce((sum, p) => sum + p.overall, 0) / players.length);
 }
 
+const ERA_LABELS: Record<string, string> = {
+  CURRENT: "Current",
+  CLASSIC: "Classic",
+  ALL_TIME: "All-Time",
+};
+
+function EraBadge({ eraTag }: { eraTag: string }) {
+  return <span className="era-badge">{ERA_LABELS[eraTag] ?? eraTag}</span>;
+}
+
 function HiddenCard({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button type="button" className="hidden-card" onClick={onClick}>
@@ -52,6 +62,7 @@ function StarterSlot({
           {player.overall}
         </span>
       </span>
+      <EraBadge eraTag={player.eraTag} />
     </button>
   );
 }
@@ -87,6 +98,7 @@ function BenchCard({
           <span className="ovr-badge" style={{ background: ovrColor(player.overall) }}>
             {player.overall}
           </span>
+          <EraBadge eraTag={player.eraTag} />
         </div>
       </div>
     </button>
