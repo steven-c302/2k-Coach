@@ -77,6 +77,34 @@ export async function fetchTeams(era: string): Promise<string[]> {
   return response.json();
 }
 
+export type MismatchResponse = {
+  category: string;
+  favoredTeam: string;
+  severity: string;
+  evidence: string;
+};
+
+export type MatchupAnalysisResponse = {
+  mismatches: MismatchResponse[];
+};
+
+export async function analyzeMatchup(
+  teamAPlayerIds: number[],
+  teamBPlayerIds: number[]
+): Promise<MatchupAnalysisResponse> {
+  const response = await fetch(`${CORE_BASE_URL}/api/matchups/analyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teamAPlayerIds, teamBPlayerIds }),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error ?? `core returned ${response.status}`);
+  }
+  return response.json();
+}
+
 export async function generateRoster(request: RosterGenerateRequest): Promise<GeneratedRoster> {
   const response = await fetch(`${CORE_BASE_URL}/api/rosters/generate`, {
     method: "POST",

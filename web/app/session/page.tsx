@@ -32,9 +32,9 @@ export default function SessionLandingPage() {
   return (
     <main>
       <h1>Live Session</h1>
-      <p style={{ color: "#666" }}>
-        Milestone 5: session join + ready state, broadcast live over WebSocket. No matchup
-        analysis or coaching feed wired in yet — see the project README.
+      <p style={{ color: "var(--text-muted)" }}>
+        Host or join a session to co-watch a matchup live — pick two teams, get instant rules-based
+        mismatches plus an AI coach's take, broadcast to everyone in the session as it updates.
       </p>
 
       <div className="builder-form" style={{ maxWidth: 360 }}>

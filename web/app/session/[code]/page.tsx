@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Client } from "@stomp/stompjs";
 import TapTracker from "@/components/TapTracker";
+import MultiPlayerPicker from "@/components/MultiPlayerPicker";
+import type { MismatchResponse, PlayerSummary } from "@/lib/core-client";
 
 const CORE_WS_URL = process.env.NEXT_PUBLIC_CORE_WS_URL ?? "ws://localhost:8080/ws";
 
@@ -41,11 +43,36 @@ function getOrCreateClientId(code: string): string {
   return id;
 }
 
-function parseIds(input: string): number[] {
-  return input
-    .split(",")
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isFinite(n) && n > 0);
+function humanizeCategory(category: string): string {
+  return category
+    .toLowerCase()
+    .split("_")
+    .map((w) => w[0]?.toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function severityColor(severity: string): string {
+  if (severity === "HIGH") return "var(--ovr-elite)";
+  if (severity === "MEDIUM") return "var(--ovr-great)";
+  return "var(--ovr-average)";
+}
+
+function MismatchCard({ mismatch }: { mismatch: MismatchResponse }) {
+  return (
+    <div className="player-card" style={{ alignItems: "flex-start" }}>
+      <span className="ovr-badge" style={{ background: severityColor(mismatch.severity), flexShrink: 0 }}>
+        {mismatch.severity}
+      </span>
+      <div className="player-card-info">
+        <div className="player-card-name">
+          {humanizeCategory(mismatch.category)} <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>— favors {mismatch.favoredTeam}</span>
+        </div>
+        <div className="player-card-meta" style={{ marginTop: "0.3rem" }}>
+          {mismatch.evidence}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function LiveSessionPage({ params }: { params: { code: string } }) {
@@ -57,9 +84,11 @@ export default function LiveSessionPage({ params }: { params: { code: string } }
   const [clientId, setClientId] = useState<string | null>(null);
   const clientRef = useRef<Client | null>(null);
 
-  const [teamAIds, setTeamAIds] = useState("");
-  const [teamBIds, setTeamBIds] = useState("");
+  const [teamAPlayers, setTeamAPlayers] = useState<PlayerSummary[]>([]);
+  const [teamBPlayers, setTeamBPlayers] = useState<PlayerSummary[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [mismatches, setMismatches] = useState<MismatchResponse[] | null>(null);
   const [coachingLog, setCoachingLog] = useState<CoachingLogEntry[]>([]);
 
   useEffect(() => {
@@ -101,12 +130,30 @@ export default function LiveSessionPage({ params }: { params: { code: string } }
     });
   }
 
-  function analyzeMatchup() {
-    const teamAPlayerIds = parseIds(teamAIds);
-    const teamBPlayerIds = parseIds(teamBIds);
+  async function analyzeMatchup() {
+    const teamAPlayerIds = teamAPlayers.map((p) => p.id);
+    const teamBPlayerIds = teamBPlayers.map((p) => p.id);
     if (!clientRef.current || teamAPlayerIds.length === 0 || teamBPlayerIds.length === 0) return;
 
     setAnalyzing(true);
+    setAnalyzeError(null);
+    setMismatches(null);
+
+    // The rules engine is fast/synchronous - fetch it directly over REST so mismatches show up
+    // immediately, instead of waiting on the LLM narration (which arrives later over the socket).
+    try {
+      const response = await fetch("/api/matchups/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamAPlayerIds, teamBPlayerIds }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Failed to analyze matchup");
+      setMismatches(body.mismatches);
+    } catch (err) {
+      setAnalyzeError(err instanceof Error ? err.message : "Unknown error");
+    }
+
     clientRef.current.publish({
       destination: `/app/sessions/${code}/analyze`,
       body: JSON.stringify({ teamAPlayerIds, teamBPlayerIds }),
@@ -129,6 +176,7 @@ export default function LiveSessionPage({ params }: { params: { code: string } }
   const isHost = state?.hostClientId === clientId;
   const isGuest = state?.guestClientId === clientId;
   const myReady = isHost ? state?.hostReady : isGuest ? state?.guestReady : false;
+  const canAnalyze = teamAPlayers.length > 0 && teamBPlayers.length > 0;
 
   return (
     <main>
@@ -169,23 +217,38 @@ export default function LiveSessionPage({ params }: { params: { code: string } }
         </button>
       )}
 
-      <fieldset className="builder-form" style={{ marginTop: "2rem", maxWidth: 480 }}>
-        <legend>Analyze a matchup (Milestone 6 — async/versioned coaching narration)</legend>
-        <div className="field-row">
-          <label style={{ flex: 1 }}>
-            Team A player ids (comma-separated)
-            <input type="text" placeholder="5,6,13,21,43" value={teamAIds} onChange={(e) => setTeamAIds(e.target.value)} />
-          </label>
-          <label style={{ flex: 1 }}>
-            Team B player ids
-            <input type="text" placeholder="222,232,233,236,242" value={teamBIds} onChange={(e) => setTeamBIds(e.target.value)} />
-          </label>
+      <fieldset className="builder-form" style={{ marginTop: "2rem" }}>
+        <legend>Analyze a matchup</legend>
+        <div className="matchup-grid" style={{ marginTop: 0 }}>
+          <MultiPlayerPicker label="Team A" selected={teamAPlayers} onChange={setTeamAPlayers} />
+          <MultiPlayerPicker label="Team B" selected={teamBPlayers} onChange={setTeamBPlayers} />
         </div>
-        <button type="button" onClick={analyzeMatchup} disabled={analyzing}>
+        <button type="button" onClick={analyzeMatchup} disabled={analyzing || !canAnalyze}>
           {analyzing ? "Analyzing..." : "Analyze matchup"}
         </button>
+
+        {analyzeError && <p className="status-pill error">{analyzeError}</p>}
+
+        {mismatches && (
+          <div style={{ marginTop: "0.5rem" }}>
+            <div className="section-label">
+              {mismatches.length === 0 ? "No notable mismatches" : "Mismatches"}
+            </div>
+            {mismatches.length > 0 && (
+              <div className="player-grid">
+                {mismatches.map((m, i) => (
+                  <MismatchCard key={i} mismatch={m} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {state?.lastNarration && (
-          <p style={{ fontStyle: "italic", marginTop: "0.5rem" }}>&ldquo;{state.lastNarration}&rdquo;</p>
+          <div style={{ marginTop: "0.75rem" }}>
+            <div className="section-label">Coach's take</div>
+            <p style={{ fontStyle: "italic" }}>&ldquo;{state.lastNarration}&rdquo;</p>
+          </div>
         )}
       </fieldset>
 
@@ -194,7 +257,7 @@ export default function LiveSessionPage({ params }: { params: { code: string } }
       </div>
 
       {state && Object.keys(state.liveGameState).length > 0 && (
-        <p style={{ marginTop: "1rem", fontSize: "0.85rem", color: "#888" }}>
+        <p style={{ marginTop: "1rem", fontSize: "0.85rem", color: "var(--text-muted)" }}>
           Live observed state (from OCR or the tap-tracker):{" "}
           {Object.entries(state.liveGameState)
             .map(([key, value]) => `${key}=${value}`)
@@ -207,32 +270,34 @@ export default function LiveSessionPage({ params }: { params: { code: string } }
           Refresh coaching log
         </button>
         {coachingLog.length > 0 && (
-          <table style={{ marginTop: "0.75rem", width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "left" }}>
-                <th>Seq</th>
-                <th>Status</th>
-                <th>Narration</th>
-              </tr>
-            </thead>
-            <tbody>
-              {coachingLog.map((entry) => (
-                <tr key={entry.sequenceNumber}>
-                  <td>{entry.sequenceNumber}</td>
-                  <td>
-                    <span className={`status-pill ${entry.status === "DELIVERED" ? "ok" : "error"}`}>
-                      {entry.status}
-                    </span>
-                  </td>
-                  <td>{entry.llmNarration}</td>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ marginTop: "0.75rem", width: "100%" }}>
+              <thead>
+                <tr>
+                  <th>Seq</th>
+                  <th>Status</th>
+                  <th>Narration</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {coachingLog.map((entry) => (
+                  <tr key={entry.sequenceNumber}>
+                    <td>{entry.sequenceNumber}</td>
+                    <td>
+                      <span className={`status-pill ${entry.status === "DELIVERED" ? "ok" : "error"}`}>
+                        {entry.status}
+                      </span>
+                    </td>
+                    <td>{entry.llmNarration}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      <p style={{ color: "#888", marginTop: "2rem", fontSize: "0.85rem" }}>
+      <p style={{ color: "var(--text-muted)", marginTop: "2rem", fontSize: "0.85rem" }}>
         Share code <strong>{code}</strong> with someone else and have them join as guest to see
         this update live in both tabs.
       </p>
