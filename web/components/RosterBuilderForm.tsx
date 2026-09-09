@@ -3,7 +3,20 @@
 import { useState } from "react";
 import type { GeneratedRoster, PlayerSummary, RosterCriterionSpec } from "@/lib/core-client";
 import PlayerAutocomplete from "./PlayerAutocomplete";
-import RosterResult from "./RosterResult";
+import TeamMatchup from "./TeamMatchup";
+
+async function requestRoster(criteria: RosterCriterionSpec[], teamSize: number, era: string): Promise<GeneratedRoster> {
+  const response = await fetch("/api/rosters/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ criteria, teamSize, era }),
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body.error ?? "Failed to generate roster");
+  }
+  return body as GeneratedRoster;
+}
 
 const POSITIONS = ["PG", "SG", "SF", "PF", "C"];
 
@@ -22,7 +35,8 @@ export default function RosterBuilderForm() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<GeneratedRoster | null>(null);
+  const [teamA, setTeamA] = useState<GeneratedRoster | null>(null);
+  const [teamB, setTeamB] = useState<GeneratedRoster | null>(null);
 
   function togglePosition(position: string) {
     setAllowedPositions((prev) =>
@@ -34,30 +48,31 @@ export default function RosterBuilderForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setResult(null);
+    setTeamA(null);
+    setTeamB(null);
 
-    const criteria: RosterCriterionSpec[] = [];
+    const sharedCriteria: RosterCriterionSpec[] = [];
     if (useOverallRange) {
-      criteria.push({ type: "OVERALL_RANGE", min: minOverall, max: maxOverall });
+      sharedCriteria.push({ type: "OVERALL_RANGE", min: minOverall, max: maxOverall });
     }
     if (usePositionFilter && allowedPositions.length > 0) {
-      criteria.push({ type: "POSITION", allowed: allowedPositions });
+      sharedCriteria.push({ type: "POSITION", allowed: allowedPositions });
     }
-    if (buildAroundPlayer) {
-      criteria.push({ type: "BUILD_AROUND", playerId: buildAroundPlayer.id });
-    }
+    // Build-around only makes sense for one team; Team B never anchors on the same player.
+    const criteriaA = buildAroundPlayer
+      ? [...sharedCriteria, { type: "BUILD_AROUND" as const, playerId: buildAroundPlayer.id }]
+      : sharedCriteria;
 
     try {
-      const response = await fetch("/api/rosters/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ criteria, teamSize, era }),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        throw new Error(body.error ?? "Failed to generate roster");
-      }
-      setResult(body);
+      const generatedA = await requestRoster(criteriaA, teamSize, era);
+      const usedIds = [...generatedA.starters, ...generatedA.bench].map((p) => p.id);
+      const generatedB = await requestRoster(
+        [...sharedCriteria, { type: "EXCLUDE_IDS", ids: usedIds }],
+        teamSize,
+        era
+      );
+      setTeamA(generatedA);
+      setTeamB(generatedB);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -157,12 +172,12 @@ export default function RosterBuilderForm() {
         </fieldset>
 
         <button type="submit" disabled={loading}>
-          {loading ? "Generating..." : "Generate roster"}
+          {loading ? "Generating..." : "Generate teams"}
         </button>
       </form>
 
       {error && <p className="status-pill error">{error}</p>}
-      {result && <RosterResult roster={result} />}
+      {teamA && teamB && <TeamMatchup teamA={teamA} teamB={teamB} />}
     </div>
   );
 }

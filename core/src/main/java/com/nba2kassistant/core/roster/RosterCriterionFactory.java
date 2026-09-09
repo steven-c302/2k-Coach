@@ -3,6 +3,7 @@ package com.nba2kassistant.core.roster;
 import com.nba2kassistant.core.player.Player;
 import com.nba2kassistant.core.player.PlayerRepository;
 import com.nba2kassistant.core.roster.dto.BuildAroundCriterionSpec;
+import com.nba2kassistant.core.roster.dto.ExcludeIdsCriterionSpec;
 import com.nba2kassistant.core.roster.dto.OverallRangeCriterionSpec;
 import com.nba2kassistant.core.roster.dto.PositionCriterionSpec;
 import com.nba2kassistant.core.roster.dto.RosterCriterionSpec;
@@ -40,6 +41,7 @@ public class RosterCriterionFactory {
                     criteria.add(new BuildAroundPlayerCriterion(player));
                     anchor = player;
                 }
+                case ExcludeIdsCriterionSpec s -> criteria.add(new ExcludeIdsCriterion(new HashSet<>(s.ids())));
             }
         }
 
