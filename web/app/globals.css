@@ -37,7 +37,7 @@ a {
 }
 
 main {
-  max-width: 960px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 2rem 1.5rem 4rem;
 }
@@ -63,7 +63,7 @@ button {
 }
 
 .site-header-inner {
-  max-width: 960px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 0.9rem 1.5rem;
   display: flex;
@@ -193,6 +193,13 @@ button {
   display: flex;
   gap: 1rem;
   flex-wrap: wrap;
+}
+
+.field-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  max-width: 46rem;
 }
 
 .builder-form button[type="submit"] {

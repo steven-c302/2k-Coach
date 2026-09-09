@@ -47,9 +47,21 @@ const TEAMS: Record<string, TeamStyle> = {
 
 const FALLBACK: TeamStyle = { abbr: "FA", color: "#5b6472" };
 
+// Longest names first so "Los Angeles Clippers" wins over any shorter accidental substring match.
+const TEAM_ENTRIES = Object.entries(TEAMS).sort((a, b) => b[0].length - a[0].length);
+
 export function teamStyle(teamName: string | null | undefined): TeamStyle {
   if (!teamName) return FALLBACK;
-  return TEAMS[teamName] ?? { ...FALLBACK, abbr: abbreviateUnknown(teamName) };
+  if (TEAMS[teamName]) return TEAMS[teamName];
+
+  // Classic/all-time entries carry the raw nba2kapi team string verbatim (e.g. "2015-16 Golden
+  // State Warriors", "All-Time Washington Wizards") rather than the bare franchise name, so an
+  // exact-match lookup misses - fall back to checking whether a known franchise name appears
+  // inside it before giving up and generating a generic acronym.
+  const contained = TEAM_ENTRIES.find(([name]) => teamName.includes(name));
+  if (contained) return contained[1];
+
+  return { ...FALLBACK, abbr: abbreviateUnknown(teamName) };
 }
 
 function abbreviateUnknown(teamName: string): string {

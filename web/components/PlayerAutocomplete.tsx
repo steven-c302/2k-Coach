@@ -22,7 +22,8 @@ export default function PlayerAutocomplete({ era, selected, onSelect }: Props) {
       return;
     }
     debounceRef.current = setTimeout(async () => {
-      const params = new URLSearchParams({ name: query, era });
+      const params = new URLSearchParams({ name: query });
+      if (era && era !== "ALL") params.set("era", era);
       const response = await fetch(`/api/players?${params.toString()}`);
       if (response.ok) {
         setResults(await response.json());

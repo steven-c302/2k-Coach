@@ -36,7 +36,11 @@ public class RosterGenerationService {
                 request.criteria() == null ? List.of() : request.criteria());
 
         List<RosterCriterion> pipeline = new ArrayList<>();
-        pipeline.add(new EraCriterion(era));
+        // "ALL" opts into mixing current/classic/all-time players on one roster; every other
+        // value (including the CURRENT default) still restricts to a single era, unchanged.
+        if (!"ALL".equals(era)) {
+            pipeline.add(new EraCriterion(era));
+        }
         pipeline.addAll(resolution.criteria());
         boolean hasOrderingCriterion = resolution.criteria().stream()
                 .anyMatch(c -> c instanceof BuildAroundPlayerCriterion);

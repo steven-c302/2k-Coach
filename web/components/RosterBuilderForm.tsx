@@ -65,12 +65,18 @@ function settingsToCriteria(settings: TeamGenSettings): RosterCriterionSpec[] {
 
 function TeamSettingsPanel({
   label,
+  era,
   settings,
   onChange,
+  buildAroundPlayer,
+  onBuildAroundChange,
 }: {
   label: string;
+  era: string;
   settings: TeamGenSettings;
   onChange: (next: TeamGenSettings) => void;
+  buildAroundPlayer: PlayerSummary | null;
+  onBuildAroundChange: (player: PlayerSummary | null) => void;
 }) {
   function set<K extends keyof TeamGenSettings>(key: K, value: TeamGenSettings[K]) {
     onChange({ ...settings, [key]: value });
@@ -178,6 +184,13 @@ function TeamSettingsPanel({
           </label>
         </div>
       )}
+
+      <div style={{ marginTop: "0.6rem" }}>
+        <span style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "0.3rem" }}>
+          Build around a player (optional)
+        </span>
+        <PlayerAutocomplete era={era} selected={buildAroundPlayer} onSelect={onBuildAroundChange} />
+      </div>
     </fieldset>
   );
 }
@@ -192,7 +205,8 @@ export default function RosterBuilderForm() {
   const [teamASettings, setTeamASettings] = useState<TeamGenSettings>(DEFAULT_TEAM_SETTINGS);
   const [teamBSettings, setTeamBSettings] = useState<TeamGenSettings>(DEFAULT_TEAM_SETTINGS);
 
-  const [buildAroundPlayer, setBuildAroundPlayer] = useState<PlayerSummary | null>(null);
+  const [buildAroundA, setBuildAroundA] = useState<PlayerSummary | null>(null);
+  const [buildAroundB, setBuildAroundB] = useState<PlayerSummary | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -216,19 +230,32 @@ export default function RosterBuilderForm() {
       usePositionFilter && allowedPositions.length > 0 ? [{ type: "POSITION", allowed: allowedPositions }] : [];
 
     const criteriaA: RosterCriterionSpec[] = [...settingsToCriteria(teamASettings), ...positionCriteria];
-    // Build-around only makes sense for one team; Team B never anchors on the same player.
-    if (buildAroundPlayer) {
-      criteriaA.push({ type: "BUILD_AROUND", playerId: buildAroundPlayer.id });
+    if (buildAroundA) {
+      criteriaA.push({ type: "BUILD_AROUND", playerId: buildAroundA.id });
     }
 
     try {
       const generatedA = await requestRoster(criteriaA, teamSize, era);
       const usedIds = [...generatedA.starters, ...generatedA.bench].map((p) => p.id);
+
       const criteriaB: RosterCriterionSpec[] = [
         ...settingsToCriteria(teamBSettings),
         ...positionCriteria,
         { type: "EXCLUDE_IDS", ids: usedIds },
       ];
+      // If Team B's own build-around pick happens to already be on Team A (possible when both
+      // teams draw from the same pool), it can't be excluded and anchored at once - drop the
+      // exclude for that one id so the anchor resolution in RosterCriterionFactory still finds it.
+      if (buildAroundB) {
+        criteriaB.push({ type: "BUILD_AROUND", playerId: buildAroundB.id });
+        const withoutAnchor = criteriaB.find(
+          (c): c is Extract<RosterCriterionSpec, { type: "EXCLUDE_IDS" }> => c.type === "EXCLUDE_IDS"
+        );
+        if (withoutAnchor) {
+          withoutAnchor.ids = withoutAnchor.ids.filter((id) => id !== buildAroundB.id);
+        }
+      }
+
       const generatedB = await requestRoster(criteriaB, teamSize, era);
       setTeamA(generatedA);
       setTeamB(generatedB);
@@ -259,13 +286,28 @@ export default function RosterBuilderForm() {
               <option value="CURRENT">Current rosters</option>
               <option value="CLASSIC">Classic (any era/team)</option>
               <option value="ALL_TIME">All-Time teams</option>
+              <option value="ALL">All eras mixed together</option>
             </select>
           </label>
         </div>
 
         <div className="matchup-grid" style={{ marginTop: 0 }}>
-          <TeamSettingsPanel label="Team A settings" settings={teamASettings} onChange={setTeamASettings} />
-          <TeamSettingsPanel label="Team B settings" settings={teamBSettings} onChange={setTeamBSettings} />
+          <TeamSettingsPanel
+            label="Team A settings"
+            era={era}
+            settings={teamASettings}
+            onChange={setTeamASettings}
+            buildAroundPlayer={buildAroundA}
+            onBuildAroundChange={setBuildAroundA}
+          />
+          <TeamSettingsPanel
+            label="Team B settings"
+            era={era}
+            settings={teamBSettings}
+            onChange={setTeamBSettings}
+            buildAroundPlayer={buildAroundB}
+            onBuildAroundChange={setBuildAroundB}
+          />
         </div>
 
         <fieldset>
@@ -275,8 +317,13 @@ export default function RosterBuilderForm() {
               checked={usePositionFilter}
               onChange={(e) => setUsePositionFilter(e.target.checked)}
             />
-            Limit positions (both teams)
+            Only draft from specific positions (both teams)
           </label>
+          <p className="field-hint">
+            Bench spots are always automatically spread across all 5 positions on their own — this
+            is a separate, optional restriction on which positions are eligible to be picked at
+            all (e.g. only PG and C). Leave unchecked for normal, fully balanced teams.
+          </p>
           {usePositionFilter && (
             <div className="position-toggles">
               {POSITIONS.map((position) => (
@@ -291,11 +338,6 @@ export default function RosterBuilderForm() {
               ))}
             </div>
           )}
-        </fieldset>
-
-        <fieldset>
-          <legend>Build around a player (optional, Team A only)</legend>
-          <PlayerAutocomplete era={era} selected={buildAroundPlayer} onSelect={setBuildAroundPlayer} />
         </fieldset>
 
         <button type="submit" disabled={loading}>
