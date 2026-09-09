@@ -6,11 +6,11 @@ runs per session, started/stopped explicitly rather than automatically —
 there's no reliable signal in this environment for "a game just started."
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.capture.loop import CaptureLoop
-from app.capture.regions import profile_for
+from app.capture.regions import DEFAULT_PROFILE
 from app.config import settings
 
 app = FastAPI(title="nba2k-assistant-vision")
@@ -20,7 +20,6 @@ _active_loops: dict[str, CaptureLoop] = {}
 
 class StartCaptureRequest(BaseModel):
     session_id: str
-    resolution: tuple[int, int] = (1920, 1080)
 
 
 class SessionIdRequest(BaseModel):
@@ -42,17 +41,12 @@ def capture_status() -> dict[str, object]:
 
 
 @app.post("/api/capture/start")
-def start_capture(request: StartCaptureRequest) -> dict[str, str]:
-    try:
-        profile = profile_for(request.resolution)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-
+async def start_capture(request: StartCaptureRequest) -> dict[str, str]:
     existing = _active_loops.get(request.session_id)
     if existing is not None and existing.running:
         return {"status": "already running"}
 
-    loop = CaptureLoop(session_id=request.session_id, profile=profile)
+    loop = CaptureLoop(session_id=request.session_id, profile=DEFAULT_PROFILE)
     loop.start()
     _active_loops[request.session_id] = loop
     return {"status": "started"}

@@ -13,7 +13,7 @@ from app.capture.regions import HudProfile
 from app.config import settings
 from app.events import EventClient, VisionEvent, VisionEventType
 from app.ocr.reader import read_text
-from app.parsing import parse_clock, parse_score
+from app.parsing import parse_clock, parse_quarter, parse_score, parse_shot_clock
 
 logger = logging.getLogger(__name__)
 
@@ -55,17 +55,27 @@ class CaptureLoop:
         directly (not just via the interval loop) so it's independently
         testable without needing to wait out a real sleep interval."""
         frame = backend.grab_frame()
+        frame_height, frame_width = frame.shape[0], frame.shape[1]
 
-        score_text = read_text(preprocess.preprocess_region(frame, self.profile.score), gpu=settings.ocr_use_gpu)
-        score = parse_score(score_text)
+        def region_text(fractional_region) -> str:
+            pixel_region = fractional_region.to_pixels(frame_width, frame_height)
+            return read_text(preprocess.preprocess_region(frame, pixel_region), gpu=settings.ocr_use_gpu)
+
+        score = parse_score(region_text(self.profile.score))
         if score is not None:
             await self._event_client.emit(VisionEvent(
                 session_id=self.session_id, type=VisionEventType.SCORE_UPDATE, payload=score,
             ))
 
-        clock_text = read_text(preprocess.preprocess_region(frame, self.profile.game_clock), gpu=settings.ocr_use_gpu)
-        clock = parse_clock(clock_text)
-        if clock is not None:
+        clock = parse_clock(region_text(self.profile.game_clock))
+        shot_clock = parse_shot_clock(region_text(self.profile.shot_clock))
+        quarter = parse_quarter(region_text(self.profile.quarter))
+        clock_payload = {
+            **(clock or {}),
+            **({"shotClockSecondsRemaining": shot_clock["secondsRemaining"]} if shot_clock else {}),
+            **(quarter or {}),
+        }
+        if clock_payload:
             await self._event_client.emit(VisionEvent(
-                session_id=self.session_id, type=VisionEventType.CLOCK_UPDATE, payload=clock,
+                session_id=self.session_id, type=VisionEventType.CLOCK_UPDATE, payload=clock_payload,
             ))
