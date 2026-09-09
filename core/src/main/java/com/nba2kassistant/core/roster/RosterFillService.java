@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Ports nba2k-roster-randomizer's {@code create_rosters_with_starters} "best
@@ -16,8 +17,7 @@ import java.util.Set;
  * distributed rosters across multiple users; this generalizes to the
  * team-builder's one-roster-per-request shape).
  *
- * <p>Algorithm: fill the 5 required positions plus bench spots from the
- * pipeline's (already filtered/ordered) candidate list, taking the
+ * <p>Algorithm: fill the 5 required positions plus bench spots, taking the
  * highest-ranked remaining candidate at each step — then recompute the
  * actual starters as the best-overall player at each position across the
  * WHOLE assembled roster, exactly like the original: a bench pickup can
@@ -25,42 +25,54 @@ import java.util.Set;
  * BUILD_AROUND anchor is the one exception — they're pinned as their
  * position's starter unconditionally, since guaranteeing the anchor a
  * starting spot is the entire point of that criterion.
+ *
+ * <p>Every slot (starters included, not just bench) is chosen through one
+ * shared {@link #pickForSlot} priority order: an unmet OVERALL_DISTRIBUTION
+ * quota first, then an active OVERALL_AVERAGE target, then the plain
+ * range-respecting default. The first two deliberately search {@code
+ * unrestricted} — the same candidate pool minus any OVERALL_RANGE filter —
+ * because both features are pointless if they can't reach outside a range
+ * the caller also set (e.g. "2 players >= 90 overall" needs somewhere to
+ * find a 90 even if the stated range tops out at 80).
  */
 @Component
 public class RosterFillService {
 
     private static final List<String> REQUIRED_POSITIONS = List.of("PG", "SG", "SF", "PF", "C");
 
-    public GeneratedRoster fill(List<Player> orderedCandidates, RosterBuildContext ctx) {
+    public GeneratedRoster fill(List<Player> preferredCandidates, List<Player> unrestrictedCandidates, RosterBuildContext ctx) {
         if (ctx.teamSize() < 5 || ctx.teamSize() > 15) {
             throw new RosterGenerationException("teamSize must be between 5 and 15");
         }
 
-        List<Player> pool = new ArrayList<>(orderedCandidates);
+        List<Player> preferred = new ArrayList<>(preferredCandidates);
+        List<Player> unrestricted = new ArrayList<>(unrestrictedCandidates);
         List<Player> roster = new ArrayList<>();
         Player anchor = ctx.anchor();
+
+        QuotaState quota = new QuotaState(ctx);
+        AverageState average = new AverageState(ctx);
 
         Set<String> positionsToFill = new LinkedHashSet<>(REQUIRED_POSITIONS);
         if (anchor != null) {
             roster.add(anchor);
             positionsToFill.remove(anchor.getPosition());
-            pool.removeIf(p -> Objects.equals(p.getId(), anchor.getId()));
+            remove(preferred, unrestricted, anchor);
+            quota.record(anchor);
+            average.record(anchor);
         }
 
         for (String position : positionsToFill) {
-            Player pick = pool.stream()
-                    .filter(p -> position.equals(p.getPosition()))
-                    .findFirst()
-                    .orElseThrow(() -> new RosterGenerationException("Not enough players available at position " + position));
+            Player pick = pickForSlot(preferred, unrestricted, Set.of(position), quota, average);
+            if (pick == null) {
+                throw new RosterGenerationException("Not enough players available at position " + position);
+            }
             roster.add(pick);
-            pool.remove(pick);
+            remove(preferred, unrestricted, pick);
         }
 
         int benchSpotsNeeded = ctx.teamSize() - roster.size();
-        if (pool.size() < benchSpotsNeeded) {
-            throw new RosterGenerationException("Not enough players available for bench spots");
-        }
-        fillBench(pool, roster, ctx, benchSpotsNeeded);
+        fillBench(preferred, unrestricted, roster, quota, average, benchSpotsNeeded);
 
         List<Player> starters = new ArrayList<>();
         for (String position : REQUIRED_POSITIONS) {
@@ -86,17 +98,10 @@ public class RosterFillService {
     /**
      * Fills bench spots one at a time, cycling the 5 positions in blocks so a block never repeats
      * a position until every position has appeared once (e.g. on a 10-man roster, bench spots 6-10
-     * — one full block — each land on a different position, same as the 5 starters do). Within
-     * that constraint, an unmet OVERALL_DISTRIBUTION quota (see {@link RosterBuildContext}) takes
-     * priority over the pool's default ordering; if no candidate satisfies both, priorities are
-     * relaxed one at a time (quota first, then position) rather than failing the whole roster.
+     * — one full block — each land on a different position, same as the 5 starters do).
      */
-    private void fillBench(List<Player> pool, List<Player> roster, RosterBuildContext ctx, int benchSpotsNeeded) {
-        int aboveRemaining = Math.max(0, ctx.aboveCount()
-                - (int) roster.stream().filter(p -> p.getOverall() >= ctx.aboveThreshold()).count());
-        int belowRemaining = Math.max(0, ctx.belowCount()
-                - (int) roster.stream().filter(p -> p.getOverall() <= ctx.belowThreshold()).count());
-
+    private void fillBench(List<Player> preferred, List<Player> unrestricted, List<Player> roster,
+                            QuotaState quota, AverageState average, int benchSpotsNeeded) {
         Set<String> usedInBlock = new LinkedHashSet<>();
         for (int i = 0; i < benchSpotsNeeded; i++) {
             if (usedInBlock.size() >= REQUIRED_POSITIONS.size()) {
@@ -105,39 +110,134 @@ public class RosterFillService {
             Set<String> allowedPositions = new LinkedHashSet<>(REQUIRED_POSITIONS);
             allowedPositions.removeAll(usedInBlock);
 
-            Player pick = null;
-            if (aboveRemaining > 0) {
-                pick = firstMatch(pool, p -> allowedPositions.contains(p.getPosition()) && p.getOverall() >= ctx.aboveThreshold());
-                if (pick == null) {
-                    pick = firstMatch(pool, p -> p.getOverall() >= ctx.aboveThreshold());
-                }
-                if (pick != null) {
-                    aboveRemaining--;
-                }
-            }
-            if (pick == null && belowRemaining > 0) {
-                pick = firstMatch(pool, p -> allowedPositions.contains(p.getPosition()) && p.getOverall() <= ctx.belowThreshold());
-                if (pick == null) {
-                    pick = firstMatch(pool, p -> p.getOverall() <= ctx.belowThreshold());
-                }
-                if (pick != null) {
-                    belowRemaining--;
-                }
-            }
+            Player pick = pickForSlot(preferred, unrestricted, allowedPositions, quota, average);
             if (pick == null) {
-                pick = firstMatch(pool, p -> allowedPositions.contains(p.getPosition()));
-            }
-            if (pick == null) {
-                pick = pool.get(0);
+                throw new RosterGenerationException("Not enough players available for bench spots");
             }
 
             roster.add(pick);
-            pool.remove(pick);
+            remove(preferred, unrestricted, pick);
             usedInBlock.add(pick.getPosition());
         }
     }
 
-    private Player firstMatch(List<Player> pool, java.util.function.Predicate<Player> predicate) {
+    private Player pickForSlot(List<Player> preferred, List<Player> unrestricted, Set<String> allowedPositions,
+                                QuotaState quota, AverageState average) {
+        // quota.record() below is the single source of truth for decrementing both counters - it
+        // fires for every pick, quota-seeking or not, so a naturally-qualifying default/average
+        // pick still counts. The seeking branches here only choose WHICH player, never decrement.
+        Player pick = null;
+
+        if (quota.aboveRemaining > 0) {
+            pick = quotaMatch(preferred, unrestricted, allowedPositions, p -> p.getOverall() >= quota.aboveThreshold);
+        }
+        if (pick == null && quota.belowRemaining > 0) {
+            pick = quotaMatch(preferred, unrestricted, allowedPositions, p -> p.getOverall() <= quota.belowThreshold);
+        }
+        if (pick == null && average.active) {
+            double ideal = average.idealNext();
+            pick = closestByOverall(unrestricted, allowedPositions, ideal);
+            if (pick == null) {
+                pick = closestByOverall(unrestricted, null, ideal);
+            }
+        }
+        if (pick == null) {
+            pick = firstMatch(preferred, p -> allowedPositions.contains(p.getPosition()));
+        }
+        if (pick == null) {
+            pick = firstMatch(unrestricted, p -> allowedPositions.contains(p.getPosition()));
+        }
+        if (pick == null) {
+            pick = firstMatch(preferred, p -> true);
+        }
+        if (pick == null) {
+            pick = firstMatch(unrestricted, p -> true);
+        }
+
+        if (pick != null) {
+            quota.record(pick);
+            average.record(pick);
+        }
+        return pick;
+    }
+
+    /** Quota search order: in-range + in-position, then out-of-range + in-position, then either ignoring position. */
+    private Player quotaMatch(List<Player> preferred, List<Player> unrestricted, Set<String> allowedPositions, Predicate<Player> threshold) {
+        Player pick = firstMatch(preferred, p -> allowedPositions.contains(p.getPosition()) && threshold.test(p));
+        if (pick == null) {
+            pick = firstMatch(unrestricted, p -> allowedPositions.contains(p.getPosition()) && threshold.test(p));
+        }
+        if (pick == null) {
+            pick = firstMatch(preferred, threshold);
+        }
+        if (pick == null) {
+            pick = firstMatch(unrestricted, threshold);
+        }
+        return pick;
+    }
+
+    private Player firstMatch(List<Player> pool, Predicate<Player> predicate) {
         return pool.stream().filter(predicate).findFirst().orElse(null);
+    }
+
+    private Player closestByOverall(List<Player> pool, Set<String> allowedPositions, double ideal) {
+        return pool.stream()
+                .filter(p -> allowedPositions == null || allowedPositions.contains(p.getPosition()))
+                .min(Comparator.comparingDouble(p -> Math.abs(p.getOverall() - ideal)))
+                .orElse(null);
+    }
+
+    private void remove(List<Player> preferred, List<Player> unrestricted, Player player) {
+        preferred.removeIf(p -> Objects.equals(p.getId(), player.getId()));
+        unrestricted.removeIf(p -> Objects.equals(p.getId(), player.getId()));
+    }
+
+    /** Tracks how many more above/below-threshold players are still needed to satisfy OVERALL_DISTRIBUTION. */
+    private static final class QuotaState {
+        final int aboveThreshold;
+        final int belowThreshold;
+        int aboveRemaining;
+        int belowRemaining;
+
+        QuotaState(RosterBuildContext ctx) {
+            this.aboveThreshold = ctx.aboveThreshold();
+            this.belowThreshold = ctx.belowThreshold();
+            this.aboveRemaining = ctx.aboveCount();
+            this.belowRemaining = ctx.belowCount();
+        }
+
+        void record(Player p) {
+            if (aboveRemaining > 0 && p.getOverall() >= aboveThreshold) {
+                aboveRemaining--;
+            }
+            if (belowRemaining > 0 && p.getOverall() <= belowThreshold) {
+                belowRemaining--;
+            }
+        }
+    }
+
+    /** Tracks the running average so each pick can target the value the remaining slots still need. */
+    private static final class AverageState {
+        final boolean active;
+        final int targetSum;
+        final int teamSize;
+        int runningSum = 0;
+        int slotsFilled = 0;
+
+        AverageState(RosterBuildContext ctx) {
+            this.active = ctx.targetAverage() > 0;
+            this.targetSum = ctx.targetAverage() * ctx.teamSize();
+            this.teamSize = ctx.teamSize();
+        }
+
+        double idealNext() {
+            int remaining = teamSize - slotsFilled;
+            return remaining <= 0 ? targetSum : (double) (targetSum - runningSum) / remaining;
+        }
+
+        void record(Player p) {
+            runningSum += p.getOverall();
+            slotsFilled++;
+        }
     }
 }

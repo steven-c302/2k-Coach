@@ -55,7 +55,8 @@ public class RosterGenerationService {
                 resolution.aboveThreshold() == null ? 0 : resolution.aboveThreshold(),
                 resolution.aboveCount() == null ? 0 : resolution.aboveCount(),
                 resolution.belowThreshold() == null ? 0 : resolution.belowThreshold(),
-                resolution.belowCount() == null ? 0 : resolution.belowCount()
+                resolution.belowCount() == null ? 0 : resolution.belowCount(),
+                resolution.targetAverage() == null ? 0 : resolution.targetAverage()
         );
 
         List<Player> candidates = playerRepository.findAll();
@@ -63,7 +64,23 @@ public class RosterGenerationService {
             candidates = criterion.apply(candidates, ctx);
         }
 
-        GeneratedRoster roster = fillService.fill(candidates, ctx);
+        // A quota/average target needs to be able to reach outside a stated OVERALL_RANGE (e.g.
+        // "2 players >= 90" with a 60-80 range, or "average 70" with the same) - this reruns the
+        // same pipeline minus the range filter so RosterFillService has somewhere to look when the
+        // range-restricted pool can't satisfy one of those on its own.
+        boolean needsFallbackPool = ctx.aboveCount() > 0 || ctx.belowCount() > 0 || ctx.targetAverage() > 0;
+        List<Player> unrestricted = candidates;
+        if (needsFallbackPool && resolution.rangeMin() != null) {
+            List<RosterCriterion> fallbackPipeline = pipeline.stream()
+                    .filter(c -> !(c instanceof OverallRangeCriterion))
+                    .toList();
+            unrestricted = playerRepository.findAll();
+            for (RosterCriterion criterion : fallbackPipeline) {
+                unrestricted = criterion.apply(unrestricted, ctx);
+            }
+        }
+
+        GeneratedRoster roster = fillService.fill(candidates, unrestricted, ctx);
 
         return new GeneratedRosterResponse(
                 roster.starters().stream().map(PlayerResponse::from).toList(),

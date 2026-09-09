@@ -34,7 +34,8 @@ export type RosterCriterionSpec =
       aboveCount?: number;
       belowThreshold?: number;
       belowCount?: number;
-    };
+    }
+  | { type: "OVERALL_AVERAGE"; target: number };
 
 export type RosterGenerateRequest = {
   criteria: RosterCriterionSpec[];

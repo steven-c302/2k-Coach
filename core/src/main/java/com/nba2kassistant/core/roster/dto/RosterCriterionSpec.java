@@ -10,9 +10,10 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
         @JsonSubTypes.Type(value = PositionCriterionSpec.class, name = "POSITION"),
         @JsonSubTypes.Type(value = BuildAroundCriterionSpec.class, name = "BUILD_AROUND"),
         @JsonSubTypes.Type(value = ExcludeIdsCriterionSpec.class, name = "EXCLUDE_IDS"),
-        @JsonSubTypes.Type(value = OverallDistributionCriterionSpec.class, name = "OVERALL_DISTRIBUTION")
+        @JsonSubTypes.Type(value = OverallDistributionCriterionSpec.class, name = "OVERALL_DISTRIBUTION"),
+        @JsonSubTypes.Type(value = OverallAverageCriterionSpec.class, name = "OVERALL_AVERAGE")
 })
 public sealed interface RosterCriterionSpec
         permits OverallRangeCriterionSpec, PositionCriterionSpec, BuildAroundCriterionSpec, ExcludeIdsCriterionSpec,
-        OverallDistributionCriterionSpec {
+        OverallDistributionCriterionSpec, OverallAverageCriterionSpec {
 }

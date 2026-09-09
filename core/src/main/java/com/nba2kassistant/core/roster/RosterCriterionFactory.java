@@ -4,6 +4,7 @@ import com.nba2kassistant.core.player.Player;
 import com.nba2kassistant.core.player.PlayerRepository;
 import com.nba2kassistant.core.roster.dto.BuildAroundCriterionSpec;
 import com.nba2kassistant.core.roster.dto.ExcludeIdsCriterionSpec;
+import com.nba2kassistant.core.roster.dto.OverallAverageCriterionSpec;
 import com.nba2kassistant.core.roster.dto.OverallDistributionCriterionSpec;
 import com.nba2kassistant.core.roster.dto.OverallRangeCriterionSpec;
 import com.nba2kassistant.core.roster.dto.PositionCriterionSpec;
@@ -25,31 +26,46 @@ public class RosterCriterionFactory {
     }
 
     /**
+     * @param criteria the candidate-filtering pipeline, in spec order (includes the range filter,
+     *        if any - {@code rangeMin}/{@code rangeMax} are pulled out separately too, since
+     *        RosterFillService needs them on their own to build a range-unrestricted fallback pool
+     *        for OVERALL_DISTRIBUTION/OVERALL_AVERAGE picks that must reach outside the range)
      * @param anchor the resolved BUILD_AROUND player, if the specs included one; null otherwise
      * @param aboveThreshold/aboveCount/belowThreshold/belowCount the OVERALL_DISTRIBUTION quota, if
      *        present; a null/zero count means that half of the quota is disabled
+     * @param targetAverage the OVERALL_AVERAGE target, if present; null means disabled
      */
     public record Resolution(
             List<RosterCriterion> criteria,
             Player anchor,
+            Integer rangeMin,
+            Integer rangeMax,
             Integer aboveThreshold,
             Integer aboveCount,
             Integer belowThreshold,
-            Integer belowCount
+            Integer belowCount,
+            Integer targetAverage
     ) {
     }
 
     public Resolution resolve(List<RosterCriterionSpec> specs) {
         List<RosterCriterion> criteria = new ArrayList<>();
         Player anchor = null;
+        Integer rangeMin = null;
+        Integer rangeMax = null;
         Integer aboveThreshold = null;
         Integer aboveCount = null;
         Integer belowThreshold = null;
         Integer belowCount = null;
+        Integer targetAverage = null;
 
         for (RosterCriterionSpec spec : specs) {
             switch (spec) {
-                case OverallRangeCriterionSpec s -> criteria.add(new OverallRangeCriterion(s.min(), s.max()));
+                case OverallRangeCriterionSpec s -> {
+                    criteria.add(new OverallRangeCriterion(s.min(), s.max()));
+                    rangeMin = s.min();
+                    rangeMax = s.max();
+                }
                 case PositionCriterionSpec s -> criteria.add(new PositionCriterion(new HashSet<>(s.allowed())));
                 case BuildAroundCriterionSpec s -> {
                     Player player = playerRepository.findById(s.playerId())
@@ -64,9 +80,10 @@ public class RosterCriterionFactory {
                     belowThreshold = s.belowThreshold();
                     belowCount = s.belowCount();
                 }
+                case OverallAverageCriterionSpec s -> targetAverage = s.target();
             }
         }
 
-        return new Resolution(criteria, anchor, aboveThreshold, aboveCount, belowThreshold, belowCount);
+        return new Resolution(criteria, anchor, rangeMin, rangeMax, aboveThreshold, aboveCount, belowThreshold, belowCount, targetAverage);
     }
 }

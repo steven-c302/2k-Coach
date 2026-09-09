@@ -30,6 +30,8 @@ type TeamGenSettings = {
   useBelowQuota: boolean;
   belowThreshold: number;
   belowCount: number;
+  useAverageTarget: boolean;
+  targetAverage: number;
 };
 
 const DEFAULT_TEAM_SETTINGS: TeamGenSettings = {
@@ -42,6 +44,8 @@ const DEFAULT_TEAM_SETTINGS: TeamGenSettings = {
   useBelowQuota: false,
   belowThreshold: 75,
   belowCount: 2,
+  useAverageTarget: false,
+  targetAverage: 80,
 };
 
 function settingsToCriteria(settings: TeamGenSettings): RosterCriterionSpec[] {
@@ -59,6 +63,9 @@ function settingsToCriteria(settings: TeamGenSettings): RosterCriterionSpec[] {
         ? { belowThreshold: settings.belowThreshold, belowCount: settings.belowCount }
         : {}),
     });
+  }
+  if (settings.useAverageTarget) {
+    criteria.push({ type: "OVERALL_AVERAGE", target: settings.targetAverage });
   }
   return criteria;
 }
@@ -185,6 +192,35 @@ function TeamSettingsPanel({
         </div>
       )}
 
+      <label className="checkbox-label" style={{ marginTop: "0.6rem" }}>
+        <input
+          type="checkbox"
+          checked={settings.useAverageTarget}
+          onChange={(e) => set("useAverageTarget", e.target.checked)}
+        />
+        Target a team average overall
+      </label>
+      {settings.useAverageTarget && (
+        <div className="field-row">
+          <label>
+            Average OVR
+            <input
+              type="number"
+              min={0}
+              max={99}
+              value={settings.targetAverage}
+              onChange={(e) => set("targetAverage", Number(e.target.value))}
+            />
+          </label>
+        </div>
+      )}
+      {(settings.useAboveQuota || settings.useBelowQuota || settings.useAverageTarget) && (
+        <p className="field-hint">
+          A quota or average target can pick players outside the Overall range above when needed
+          to hit it — e.g. two 60s and a 90 to average 70, even with a narrower range set.
+        </p>
+      )}
+
       <div style={{ marginTop: "0.6rem" }}>
         <span style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "0.3rem" }}>
           Build around a player (optional)
@@ -286,7 +322,7 @@ export default function RosterBuilderForm() {
               <option value="CURRENT">Current rosters</option>
               <option value="CLASSIC">Classic (any era/team)</option>
               <option value="ALL_TIME">All-Time teams</option>
-              <option value="ALL">All eras mixed together</option>
+              <option value="ALL">All eras</option>
             </select>
           </label>
         </div>
