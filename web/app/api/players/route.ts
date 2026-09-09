@@ -1,7 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchPlayers } from "@/lib/core-client";
 
-const FORWARDED_PARAMS = ["name", "position", "minOverall", "maxOverall", "era"];
+const FORWARDED_PARAMS = [
+  "name",
+  "position",
+  "minOverall",
+  "maxOverall",
+  "era",
+  "team",
+  "minThreePt",
+  "minMidRange",
+  "minLayup",
+  "minDunk",
+  "minSpeed",
+  "minStrength",
+  "minPostDefense",
+  "minPerimeterDefense",
+];
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

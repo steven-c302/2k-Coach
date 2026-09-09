@@ -26,7 +26,6 @@ nba2kassistant:
   nba2kapi:
     base-url: ${NBA2KAPI_BASE_URL:https://api.nba2kapi.com}
     api-key: ${NBA2KAPI_API_KEY:}
-    team-type: ${NBA2KAPI_TEAM_TYPE:curr}
   seed:
     # Bootstrap fallback used when no NBA2KAPI_API_KEY is configured — see
     # JsonSeedLoader. Points at the existing scraper output, copied into

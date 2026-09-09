@@ -10,9 +10,11 @@ import java.util.List;
 public class PlayerController {
 
     private final PlayerService playerService;
+    private final PlayerRepository playerRepository;
 
-    public PlayerController(PlayerService playerService) {
+    public PlayerController(PlayerService playerService, PlayerRepository playerRepository) {
         this.playerService = playerService;
+        this.playerRepository = playerRepository;
     }
 
     @GetMapping("/api/players")
@@ -21,8 +23,30 @@ public class PlayerController {
             @RequestParam(required = false) Integer minOverall,
             @RequestParam(required = false) Integer maxOverall,
             @RequestParam(required = false) String era,
-            @RequestParam(required = false) String name
+            @RequestParam(required = false) String team,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) Integer minThreePt,
+            @RequestParam(required = false) Integer minMidRange,
+            @RequestParam(required = false) Integer minLayup,
+            @RequestParam(required = false) Integer minDunk,
+            @RequestParam(required = false) Integer minSpeed,
+            @RequestParam(required = false) Integer minStrength,
+            @RequestParam(required = false) Integer minPostDefense,
+            @RequestParam(required = false) Integer minPerimeterDefense
     ) {
-        return playerService.search(new PlayerSearchRequest(position, minOverall, maxOverall, era, name));
+        return playerService.search(new PlayerSearchRequest(
+                position, minOverall, maxOverall, era, team, name,
+                minThreePt, minMidRange, minLayup, minDunk, minSpeed, minStrength, minPostDefense, minPerimeterDefense
+        ));
+    }
+
+    @GetMapping("/api/players/eras")
+    public List<String> getEras() {
+        return playerRepository.findDistinctEraTags();
+    }
+
+    @GetMapping("/api/players/teams")
+    public List<String> getTeams(@RequestParam String era) {
+        return playerRepository.findDistinctTeamsByEraTag(era);
     }
 }

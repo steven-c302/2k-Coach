@@ -29,8 +29,19 @@ final class PlayerSpecifications {
         return (root, query, cb) -> eraTag == null ? null : cb.equal(root.get("eraTag"), eraTag);
     }
 
+    static Specification<Player> teamEquals(String team) {
+        return (root, query, cb) -> team == null ? null : cb.equal(root.get("team"), team);
+    }
+
     static Specification<Player> nameContainsIgnoreCase(String nameQuery) {
         return (root, query, cb) -> nameQuery == null ? null
                 : cb.like(cb.lower(root.get("name")), "%" + nameQuery.toLowerCase() + "%");
+    }
+
+    static Specification<Player> attributeAtLeast(String attributeField, Integer min) {
+        return (root, query, cb) -> min == null ? null
+                : cb.ge(
+                        root.join("attributes", jakarta.persistence.criteria.JoinType.INNER).<Short>get(attributeField),
+                        min.shortValue());
     }
 }

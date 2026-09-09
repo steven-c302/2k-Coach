@@ -22,7 +22,16 @@ public class PlayerService {
                 .and(PlayerSpecifications.overallAtLeast(request.minOverall()))
                 .and(PlayerSpecifications.overallAtMost(request.maxOverall()))
                 .and(PlayerSpecifications.eraTagEquals(request.eraTag()))
-                .and(PlayerSpecifications.nameContainsIgnoreCase(request.name()));
+                .and(PlayerSpecifications.teamEquals(request.team()))
+                .and(PlayerSpecifications.nameContainsIgnoreCase(request.name()))
+                .and(PlayerSpecifications.attributeAtLeast("threePt", request.minThreePt()))
+                .and(PlayerSpecifications.attributeAtLeast("midRange", request.minMidRange()))
+                .and(PlayerSpecifications.attributeAtLeast("layup", request.minLayup()))
+                .and(PlayerSpecifications.attributeAtLeast("dunk", request.minDunk()))
+                .and(PlayerSpecifications.attributeAtLeast("speed", request.minSpeed()))
+                .and(PlayerSpecifications.attributeAtLeast("strength", request.minStrength()))
+                .and(PlayerSpecifications.attributeAtLeast("postDefense", request.minPostDefense()))
+                .and(PlayerSpecifications.attributeAtLeast("perimeterDefense", request.minPerimeterDefense()));
 
         return playerRepository.findAll(spec).stream()
                 .map(PlayerResponse::from)

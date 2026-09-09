@@ -11,13 +11,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Syncs the primary data source (nba2kapi) into Postgres on a schedule — see
@@ -30,53 +30,60 @@ public class NbaTwoKApiSyncService {
     private static final Logger log = LoggerFactory.getLogger(NbaTwoKApiSyncService.class);
     static final String SOURCE = "NBA2KAPI";
 
+    /** nba2kapi's own team-type codes -> our eraTag; the specific season/team stays in {@code team} verbatim. */
+    private static final Map<String, String> TEAM_TYPE_TO_ERA_TAG = Map.of(
+            "curr", "CURRENT",
+            "class", "CLASSIC",
+            "allt", "ALL_TIME"
+    );
+
     private final NbaTwoKApiClient client;
     private final PlayerRepository playerRepository;
     private final BadgeRepository badgeRepository;
     private final PlayerBadgeRepository playerBadgeRepository;
     private final ObjectMapper objectMapper;
-    private final String teamType;
 
     public NbaTwoKApiSyncService(
             NbaTwoKApiClient client,
             PlayerRepository playerRepository,
             BadgeRepository badgeRepository,
             PlayerBadgeRepository playerBadgeRepository,
-            ObjectMapper objectMapper,
-            @Value("${nba2kassistant.nba2kapi.team-type}") String teamType
+            ObjectMapper objectMapper
     ) {
         this.client = client;
         this.playerRepository = playerRepository;
         this.badgeRepository = badgeRepository;
         this.playerBadgeRepository = playerBadgeRepository;
         this.objectMapper = objectMapper;
-        this.teamType = teamType;
     }
 
     public boolean isConfigured() {
         return client.isConfigured();
     }
 
+    /** Syncs all three of nba2kapi's team types in one pass — current rosters, classic (per-season) teams, and all-time teams. */
     @Transactional
     public int syncAll() {
-        List<NbaTwoKApiPlayerDto> players = client.fetchAllPlayers(teamType);
         int upserted = 0;
-        for (NbaTwoKApiPlayerDto dto : players) {
-            upsertPlayer(dto);
-            upserted++;
+        for (Map.Entry<String, String> teamType : TEAM_TYPE_TO_ERA_TAG.entrySet()) {
+            List<NbaTwoKApiPlayerDto> players = client.fetchAllPlayers(teamType.getKey());
+            for (NbaTwoKApiPlayerDto dto : players) {
+                upsertPlayer(dto, teamType.getValue());
+                upserted++;
+            }
         }
         log.info("nba2kapi sync upserted {} players", upserted);
         return upserted;
     }
 
-    private void upsertPlayer(NbaTwoKApiPlayerDto dto) {
+    private void upsertPlayer(NbaTwoKApiPlayerDto dto, String eraTag) {
         Player player = playerRepository.findBySourceAndExternalId(SOURCE, dto.slug())
                 .orElseGet(Player::new);
         player.setSource(SOURCE);
         player.setExternalId(dto.slug());
         player.setName(dto.name());
         player.setTeam(dto.team());
-        player.setEraTag("CURRENT");
+        player.setEraTag(eraTag);
         player.setPositions(dto.positions() == null ? List.of() : dto.positions());
         player.setPosition(dto.positions() == null || dto.positions().isEmpty() ? null : dto.positions().get(0));
         player.setOverall(dto.overall() == null ? 0 : dto.overall().shortValue());

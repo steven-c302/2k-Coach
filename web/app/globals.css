@@ -8,9 +8,9 @@
   --border-strong: rgba(255, 255, 255, 0.18);
   --text: #f4f5f7;
   --text-muted: #9aa1ae;
-  --accent: #22c55e;
-  --accent-strong: #16a34a;
-  --danger: #ef4444;
+  --accent: #ea1533;
+  --accent-strong: #b8102a;
+  --danger: #f59e0b;
 
   --ovr-elite: #f5b942;
   --ovr-great: #3b82f6;
@@ -28,7 +28,7 @@ body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   background-color: var(--bg);
   color: var(--text);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='170'%3E%3Ctext x='-20' y='70' font-family='system-ui,sans-serif' font-size='26' font-weight='800' fill='rgba(255,255,255,0.028)' transform='rotate(-18 170 85)'%3ENBA2K ASSISTANT%3C/text%3E%3Ctext x='-190' y='160' font-family='system-ui,sans-serif' font-size='26' font-weight='800' fill='rgba(255,255,255,0.028)' transform='rotate(-18 170 85)'%3ENBA2K ASSISTANT%3C/text%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='440' height='220'%3E%3Ctext x='25' y='120' font-family='system-ui,sans-serif' font-size='26' font-weight='800' fill='rgba(255,255,255,0.03)' transform='rotate(-18 220 110)'%3ENBA2K ASSISTANT%3C/text%3E%3C/svg%3E");
   background-repeat: repeat;
 }
 
@@ -480,6 +480,77 @@ button {
   height: auto;
   padding: 0.1rem 0.35rem;
   border-radius: 5px;
+}
+
+.reveal-controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+}
+
+.reveal-controls button {
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.reveal-controls button:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.starter-slot-clickable,
+.player-card-clickable {
+  font: inherit;
+  text-align: center;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+}
+
+.player-card-clickable {
+  text-align: left;
+}
+
+.hidden-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  width: 100%;
+  padding: 0.75rem 0.4rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.hidden-card-mark {
+  width: 2.2rem;
+  height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+.hidden-card-hint {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 table {

@@ -51,6 +51,24 @@ export async function fetchPlayers(params: Record<string, string> = {}): Promise
   return response.json();
 }
 
+export async function fetchEras(): Promise<string[]> {
+  const response = await fetch(`${CORE_BASE_URL}/api/players/eras`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`core returned ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function fetchTeams(era: string): Promise<string[]> {
+  const response = await fetch(`${CORE_BASE_URL}/api/players/teams?era=${encodeURIComponent(era)}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`core returned ${response.status}`);
+  }
+  return response.json();
+}
+
 export async function generateRoster(request: RosterGenerateRequest): Promise<GeneratedRoster> {
   const response = await fetch(`${CORE_BASE_URL}/api/rosters/generate`, {
     method: "POST",

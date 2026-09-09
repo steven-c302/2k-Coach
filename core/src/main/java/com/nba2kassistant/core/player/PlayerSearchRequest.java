@@ -5,6 +5,15 @@ public record PlayerSearchRequest(
         Integer minOverall,
         Integer maxOverall,
         String eraTag,
-        String name
+        String team,
+        String name,
+        Integer minThreePt,
+        Integer minMidRange,
+        Integer minLayup,
+        Integer minDunk,
+        Integer minSpeed,
+        Integer minStrength,
+        Integer minPostDefense,
+        Integer minPerimeterDefense
 ) {
 }

@@ -98,10 +98,8 @@ export default function RosterBuilderForm() {
             Era
             <select value={era} onChange={(e) => setEra(e.target.value)}>
               <option value="CURRENT">Current rosters</option>
-              <option value="1996">1996 (classic)</option>
-              <option value="2013">2013 (classic)</option>
-              <option value="2016">2016 (classic)</option>
-              <option value="2019">2019 (classic)</option>
+              <option value="CLASSIC">Classic (any era/team)</option>
+              <option value="ALL_TIME">All-Time teams</option>
             </select>
           </label>
         </div>
