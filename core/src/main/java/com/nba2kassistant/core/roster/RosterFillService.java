@@ -60,7 +60,7 @@ public class RosterFillService {
         if (pool.size() < benchSpotsNeeded) {
             throw new RosterGenerationException("Not enough players available for bench spots");
         }
-        roster.addAll(pool.subList(0, benchSpotsNeeded));
+        fillBench(pool, roster, ctx, benchSpotsNeeded);
 
         List<Player> starters = new ArrayList<>();
         for (String position : REQUIRED_POSITIONS) {
@@ -81,5 +81,63 @@ public class RosterFillService {
                 .toList();
 
         return new GeneratedRoster(starters, bench);
+    }
+
+    /**
+     * Fills bench spots one at a time, cycling the 5 positions in blocks so a block never repeats
+     * a position until every position has appeared once (e.g. on a 10-man roster, bench spots 6-10
+     * — one full block — each land on a different position, same as the 5 starters do). Within
+     * that constraint, an unmet OVERALL_DISTRIBUTION quota (see {@link RosterBuildContext}) takes
+     * priority over the pool's default ordering; if no candidate satisfies both, priorities are
+     * relaxed one at a time (quota first, then position) rather than failing the whole roster.
+     */
+    private void fillBench(List<Player> pool, List<Player> roster, RosterBuildContext ctx, int benchSpotsNeeded) {
+        int aboveRemaining = Math.max(0, ctx.aboveCount()
+                - (int) roster.stream().filter(p -> p.getOverall() >= ctx.aboveThreshold()).count());
+        int belowRemaining = Math.max(0, ctx.belowCount()
+                - (int) roster.stream().filter(p -> p.getOverall() <= ctx.belowThreshold()).count());
+
+        Set<String> usedInBlock = new LinkedHashSet<>();
+        for (int i = 0; i < benchSpotsNeeded; i++) {
+            if (usedInBlock.size() >= REQUIRED_POSITIONS.size()) {
+                usedInBlock.clear();
+            }
+            Set<String> allowedPositions = new LinkedHashSet<>(REQUIRED_POSITIONS);
+            allowedPositions.removeAll(usedInBlock);
+
+            Player pick = null;
+            if (aboveRemaining > 0) {
+                pick = firstMatch(pool, p -> allowedPositions.contains(p.getPosition()) && p.getOverall() >= ctx.aboveThreshold());
+                if (pick == null) {
+                    pick = firstMatch(pool, p -> p.getOverall() >= ctx.aboveThreshold());
+                }
+                if (pick != null) {
+                    aboveRemaining--;
+                }
+            }
+            if (pick == null && belowRemaining > 0) {
+                pick = firstMatch(pool, p -> allowedPositions.contains(p.getPosition()) && p.getOverall() <= ctx.belowThreshold());
+                if (pick == null) {
+                    pick = firstMatch(pool, p -> p.getOverall() <= ctx.belowThreshold());
+                }
+                if (pick != null) {
+                    belowRemaining--;
+                }
+            }
+            if (pick == null) {
+                pick = firstMatch(pool, p -> allowedPositions.contains(p.getPosition()));
+            }
+            if (pick == null) {
+                pick = pool.get(0);
+            }
+
+            roster.add(pick);
+            pool.remove(pick);
+            usedInBlock.add(pick.getPosition());
+        }
+    }
+
+    private Player firstMatch(List<Player> pool, java.util.function.Predicate<Player> predicate) {
+        return pool.stream().filter(predicate).findFirst().orElse(null);
     }
 }

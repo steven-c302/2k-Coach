@@ -44,7 +44,15 @@ public class RosterGenerationService {
             pipeline.add(new RandomShuffleCriterion());
         }
 
-        RosterBuildContext ctx = new RosterBuildContext(request.teamSize(), era, resolution.anchor());
+        RosterBuildContext ctx = new RosterBuildContext(
+                request.teamSize(),
+                era,
+                resolution.anchor(),
+                resolution.aboveThreshold() == null ? 0 : resolution.aboveThreshold(),
+                resolution.aboveCount() == null ? 0 : resolution.aboveCount(),
+                resolution.belowThreshold() == null ? 0 : resolution.belowThreshold(),
+                resolution.belowCount() == null ? 0 : resolution.belowCount()
+        );
 
         List<Player> candidates = playerRepository.findAll();
         for (RosterCriterion criterion : pipeline) {

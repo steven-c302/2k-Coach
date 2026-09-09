@@ -27,7 +27,14 @@ export type RosterCriterionSpec =
   | { type: "OVERALL_RANGE"; min: number; max: number }
   | { type: "POSITION"; allowed: string[] }
   | { type: "BUILD_AROUND"; playerId: number }
-  | { type: "EXCLUDE_IDS"; ids: number[] };
+  | { type: "EXCLUDE_IDS"; ids: number[] }
+  | {
+      type: "OVERALL_DISTRIBUTION";
+      aboveThreshold?: number;
+      aboveCount?: number;
+      belowThreshold?: number;
+      belowCount?: number;
+    };
 
 export type RosterGenerateRequest = {
   criteria: RosterCriterionSpec[];
