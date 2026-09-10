@@ -24,7 +24,8 @@ def test_fractional_region_scales_to_a_different_frame_size():
 
 def test_default_profile_regions_stay_within_frame_bounds():
     for region in (
-        DEFAULT_PROFILE.score,
+        DEFAULT_PROFILE.team_a_score,
+        DEFAULT_PROFILE.team_b_score,
         DEFAULT_PROFILE.game_clock,
         DEFAULT_PROFILE.shot_clock,
         DEFAULT_PROFILE.quarter,

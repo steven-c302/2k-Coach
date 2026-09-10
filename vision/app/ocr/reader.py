@@ -30,7 +30,12 @@ def get_reader(gpu: bool = False) -> "easyocr.Reader":
     return _reader
 
 
-def read_text(image: np.ndarray, gpu: bool = False) -> str:
+def read_text(image: np.ndarray, gpu: bool = False, allowlist: str | None = None) -> str:
+    """`allowlist` restricts recognized characters (e.g. "0123456789" for a region that can only
+    ever contain digits) — confirmed against real HUD screenshots to fix genuine misreads on an
+    otherwise clean, correctly-cropped image (a plain "122" read back as "127"), not just a
+    speed/style nicety: EasyOCR's default alphabet includes letters that are shape-confusable with
+    digits (a stylized "2" vs "7" and similar), and score/clock regions never contain letters."""
     reader = get_reader(gpu=gpu)
-    results = reader.readtext(image, detail=0)
+    results = reader.readtext(image, detail=0, allowlist=allowlist)
     return " ".join(results).strip()

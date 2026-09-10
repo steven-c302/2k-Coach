@@ -9,11 +9,12 @@ fractional position in both, so one profile scales to whatever resolution
 grab_frame() actually returns via to_pixels() — no per-resolution profile
 table, and no "unsupported resolution" failure mode.
 
-The DEFAULT_PROFILE fractions below are a first calibration pass read off
-four real screenshots (not synthetic), not yet tuned against a live OCR
-run — treat them as a starting point to nudge from real capture results,
-not as final. box_score has no real reference screenshot yet and is an
-unverified placeholder guess at a bottom stats overlay.
+The DEFAULT_PROFILE fractions below are measured against four real 3440x1440
+gameplay screenshots (vision/tests/fixtures/hud_samples) by cropping
+candidate regions, running them through the real OCR pipeline, and comparing
+against the actual on-screen values — see test_hud_samples.py for that as an
+automated regression check. box_score has no real reference screenshot yet
+and is an unverified placeholder guess at a bottom stats overlay.
 """
 
 from dataclasses import dataclass
@@ -47,7 +48,12 @@ class FractionalRegion:
 
 @dataclass(frozen=True)
 class HudProfile:
-    score: FractionalRegion
+    # team_a_score/team_b_score are separate regions, not one combined "score" box spanning both
+    # team logos - a combined crop reliably corrupted the OCR read (team logos between the two
+    # numbers got misread as extra digits, e.g. "122 ... 127" came back as "222"/"440"), confirmed
+    # against all four real screenshots. Two clean single-number crops fixed it completely.
+    team_a_score: FractionalRegion
+    team_b_score: FractionalRegion
     game_clock: FractionalRegion
     shot_clock: FractionalRegion
     quarter: FractionalRegion
@@ -55,9 +61,10 @@ class HudProfile:
 
 
 DEFAULT_PROFILE = HudProfile(
-    score=FractionalRegion(x=0.085, y=0.94, width=0.22, height=0.06),
-    game_clock=FractionalRegion(x=0.39, y=0.94, width=0.075, height=0.06),
-    shot_clock=FractionalRegion(x=0.463, y=0.94, width=0.04, height=0.06),
-    quarter=FractionalRegion(x=0.503, y=0.94, width=0.045, height=0.06),
+    team_a_score=FractionalRegion(x=0.2020, y=0.9299, width=0.0436, height=0.0361),
+    team_b_score=FractionalRegion(x=0.3096, y=0.9299, width=0.0407, height=0.0361),
+    game_clock=FractionalRegion(x=0.4041, y=0.9299, width=0.0256, height=0.0361),
+    shot_clock=FractionalRegion(x=0.4404, y=0.9299, width=0.0305, height=0.0361),
+    quarter=FractionalRegion(x=0.4695, y=0.9299, width=0.0276, height=0.0361),
     box_score=FractionalRegion(x=0.0, y=0.85, width=1.0, height=0.15),
 )

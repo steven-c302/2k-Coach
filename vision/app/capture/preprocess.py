@@ -1,8 +1,8 @@
 """OpenCV preprocessing: crop to a calibrated HUD region, grayscale, threshold,
 upscale — per plan §6, "this step is where most of the accuracy work
 happens." The crop/resize math is verified by unit tests against synthetic
-arrays; the actual accuracy tuning needs a real capture (see
-app/capture/regions.py) and can't happen in this environment.
+arrays; region calibration and upscale tuning are verified against real
+gameplay screenshots in test_hud_samples.py (see app/capture/regions.py).
 """
 
 import cv2

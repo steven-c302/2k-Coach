@@ -8,6 +8,7 @@ than raising, since OCR misreads are the normal case, not an error.
 import re
 
 _SCORE_PATTERN = re.compile(r"(\d{1,3})\D+(\d{1,3})")
+_SINGLE_SCORE_PATTERN = re.compile(r"\b(\d{1,3})\b")
 # One digit after the separator: NBA 2K switches the game/shot clock to a
 # seconds.tenths display once time drops under a minute (confirmed against a
 # real in-game screenshot showing "41.2" for 41.2 seconds left, not "41
@@ -26,6 +27,17 @@ def parse_score(text: str) -> dict[str, int] | None:
     if not match:
         return None
     return {"teamAScore": int(match.group(1)), "teamBScore": int(match.group(2))}
+
+
+def parse_single_score(text: str) -> int | None:
+    """For a crop bounding just one team's score number, not both - see regions.py
+    team_a_score/team_b_score: a combined crop spanning both numbers picks up the team logos
+    sitting between them as OCR noise, corrupting the read; one number per crop has nothing
+    else in frame to misread."""
+    match = _SINGLE_SCORE_PATTERN.search(text.strip())
+    if not match:
+        return None
+    return int(match.group(1))
 
 
 def parse_clock(text: str) -> dict[str, int] | None:
